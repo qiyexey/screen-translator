@@ -1,0 +1,32 @@
+# ---- Android / Gradle ----
+*.iml
+.gradle/
+build/
+app/build/
+/captures
+.externalNativeBuild
+.cxx
+release/
+*.hprof
+
+# ---- 本地环境（含 SDK 路径，不同机器不一样）----
+local.properties
+
+# ---- 签名密钥：绝不入库 ----
+# release.keystore 曾随源码一起分发过，其口令对任何拿到仓库的人都可见，
+# 等同密钥已泄漏。这里明确排除，请在本地用 keytool 自行生成（见 README）。
+*.jks
+*.keystore
+
+# ---- 构建产物 ----
+*.apk
+*.aab
+*.ap_
+*.dex
+*.zip
+
+# ---- 编辑器 / 系统 ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

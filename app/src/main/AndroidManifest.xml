@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- 网络访问 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!-- 悬浮窗权限（SYSTEM_ALERT_WINDOW）-->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
+    <!-- 前台服务 -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- v1.6.0：语音功能 -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+
+    <!-- v1.11.0：拍照翻译 -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    <!-- required=false：没有相机的设备也允许安装，只是用不了这一个功能 -->
+    <uses-feature android:name="android.hardware.camera" android:required="false" />
+
+    <!-- v1.7.0：保活（开机检测无障碍 + 电池优化引导） -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
+    <!--
+      v1.9.2 修复：Android 11+ 包可见性过滤（朗读误报"没有语音引擎"的根因）
+
+      targetSdk >= 30 时 PackageManager 查询受「包可见性过滤」限制：
+      queryIntentServices() 默认只能看到自己和自己声明过的包，第三方 TTS 引擎
+      （讯飞、eSpeak、Google 语音服务等）会被过滤掉，返回空列表。
+
+      注意：TextToSpeech 构造函数不受此限制（系统直接绑定默认引擎），
+      被过滤掉的是「扫描其它引擎、挑一个支持目标语言的」这段能力。
+      参考 https://developer.android.com/training/package-visibility
+    -->
+    <!--
+      v1.9.4 修复：与下面 v1.9.2 同源的另一半 —— 语音识别也被包可见性过滤掉了。
+
+      SpeechRecognizer.isRecognitionAvailable() 内部执行的是
+      queryIntentServices(RecognitionService.SERVICE_INTERFACE)，
+      而 SERVICE_INTERFACE = "android.speech.RecognitionService"。
+      Android 11+ 未声明该 <queries> 时它返回空列表 → 恒为 false，
+      于是「语音输入」页一打开（onCreate → refreshEngineUi）就弹
+      「此设备没有系统语音服务」，而手机其实装了 Google/厂商识别引擎。
+
+      注意影响不止那句误报：过滤同时会让 SpeechRecognizer 绑定不到识别服务，
+      所以必须声明，只改判断逻辑没用。
+      参考 https://developer.android.com/training/package-visibility
+    -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.TTS_SERVICE" />
+        </intent>
+        <intent>
+            <action android:name="android.speech.RecognitionService" />
+        </intent>
+    </queries>
+
+    <application
+        android:name=".App"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.ScreenTranslator"
+        tools:targetApi="34">
+
+        <!-- 主界面 -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true"
+            android:launchMode="singleTask">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- 屏幕读取无障碍服务 -->
+        <service
+            android:name=".service.ScreenReaderService"
+            android:exported="false"
+            android:label="@string/accessibility_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
+
+        <!-- 划词菜单入口：任何应用长按选中文字 → 菜单出现「🌐 翻译」 -->
+        <activity
+            android:name=".ui.ProcessTextActivity"
+            android:exported="true"
+            android:label="@string/process_text_label"
+            android:theme="@style/Theme.ScreenTranslator.Transparent">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
+        <!-- 悬浮窗服务（前台服务） -->
+        <service
+            android:name=".service.OverlayService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="实时屏幕翻译悬浮窗" />
+        </service>
+
+        <!-- v1.6.0：听视频翻译服务（内录走 mediaProjection，麦克风走 microphone） -->
+        <service
+            android:name=".service.VideoListenService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection|microphone">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="听视频实时翻译字幕" />
+        </service>
+
+        <!-- v1.6.0：输入翻译 -->
+        <activity
+            android:name=".ui.TranslateInputActivity"
+            android:exported="false" />
+
+        <!-- v1.6.0：语音输入翻译 -->
+        <activity
+            android:name=".ui.VoiceTranslateActivity"
+            android:exported="false" />
+
+        <!-- v1.6.0：听视频翻译控制页 -->
+        <activity
+            android:name=".ui.VideoListenActivity"
+            android:exported="false" />
+
+        <!-- v1.8.0：图片翻译（按需申请 MediaProjection 授权，抓一帧后立即释放） -->
+        <activity
+            android:name=".ui.ImageTranslateActivity"
+            android:exported="false"
+            android:label="图片翻译"
+            android:excludeFromRecents="true" />
+
+        <!-- v1.11.0：拍照翻译（CameraX 取景 + 端侧 OCR，照片不出设备） -->
+        <activity
+            android:name=".ui.CameraTranslateActivity"
+            android:exported="false"
+            android:label="拍照翻译" />
+
+        <!-- v1.13.0：首次引导（只在首次启动自动出现一次） -->
+        <activity
+            android:name=".ui.OnboardingActivity"
+            android:exported="false"
+            android:label="使用引导"
+            android:excludeFromRecents="true" />
+
+        <!-- v1.12.0：设置 —— 二级列表 + 七个三级页（主页瘦身拆分） -->
+        <activity
+            android:name=".ui.SettingsActivity"
+            android:exported="false"
+            android:label="设置" />
+        <activity
+            android:name=".ui.EngineSettingsActivity"
+            android:exported="false"
+            android:label="翻译引擎与密钥" />
+        <activity
+            android:name=".ui.TriggerSettingsActivity"
+            android:exported="false"
+            android:label="翻译触发方式" />
+        <activity
+            android:name=".ui.TtsSettingsActivity"
+            android:exported="false"
+            android:label="朗读译文" />
+        <activity
+            android:name=".ui.AsrSettingsActivity"
+            android:exported="false"
+            android:label="语音识别" />
+        <activity
+            android:name=".ui.BallStyleActivity"
+            android:exported="false"
+            android:label="悬浮球与面板外观" />
+        <activity
+            android:name=".ui.PermissionActivity"
+            android:exported="false"
+            android:label="权限与保活" />
+        <activity
+            android:name=".ui.AboutActivity"
+            android:exported="false"
+            android:label="关于与用法" />
+
+        <!-- v1.8.0：翻译历史 -->
+        <activity
+            android:name=".ui.HistoryActivity"
+            android:exported="false"
+            android:label="翻译历史" />
+
+        <!-- v1.8.0：导出历史用的 FileProvider（仅暴露 cacheDir，不开放其它目录） -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
+
+        <!-- v1.7.0：开机检测无障碍是否被 ROM 关掉，掉了发通知提醒 -->
+        <receiver
+            android:name=".receiver.BootReceiver"
+            android:enabled="true"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

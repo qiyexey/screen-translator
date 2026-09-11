@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">屏幕翻译</string>
+    <string name="accessibility_service_label">屏幕翻译</string>
+    <string name="accessibility_service_desc">读取屏幕上显示的文字内容，并发送给AI翻译引擎进行实时翻译。支持划词翻译与悬浮球定点翻译。仅在用户启用时工作。</string>
+    <string name="process_text_label">🌐 翻译</string>
+</resources>

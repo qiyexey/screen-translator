@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  M3 尺寸规范（v1.9.0）
+  圆角与间距全部按 Material 3 的 shape scale / spacing 取值，
+  避免布局里散落魔法数字（旧版有 8 处硬编码 14dp 圆角、2dp 阴影）。
+-->
+<resources xmlns:tools="http://schemas.android.com/tools">
+
+    <!-- ==================== M3 Shape Scale ==================== -->
+    <dimen name="md_corner_xs">4dp</dimen>
+    <dimen name="md_corner_sm">8dp</dimen>
+    <dimen name="md_corner_md">12dp</dimen>   <!-- 卡片 -->
+    <dimen name="md_corner_lg">16dp</dimen>   <!-- FAB / 抽屉 -->
+    <dimen name="md_corner_xl">28dp</dimen>   <!-- 对话框 / 底部面板 -->
+    <dimen name="md_corner_full">999dp</dimen> <!-- 胶囊：按钮 / 芯片 -->
+
+    <!-- 语义别名 -->
+    <dimen name="md_card_radius">@dimen/md_corner_md</dimen>
+    <dimen name="md_button_radius">@dimen/md_corner_full</dimen>
+    <dimen name="md_panel_radius">@dimen/md_corner_lg</dimen>
+
+    <!-- ==================== 间距（8dp 栅格）==================== -->
+    <dimen name="md_space_xs">4dp</dimen>
+    <dimen name="md_space_sm">8dp</dimen>
+    <dimen name="md_space_md">12dp</dimen>
+    <dimen name="md_space_lg">16dp</dimen>
+    <dimen name="md_space_xl">24dp</dimen>
+    <dimen name="md_space_2xl">32dp</dimen>
+
+    <!-- 卡片内边距 -->
+    <dimen name="md_card_padding_h">16dp</dimen>
+    <dimen name="md_card_padding_v">16dp</dimen>
+
+    <!-- 屏幕边距 -->
+    <dimen name="md_screen_margin">16dp</dimen>
+
+    <!-- ==================== 组件尺寸 ==================== -->
+    <dimen name="md_button_height">44dp</dimen>
+    <dimen name="md_touch_target">48dp</dimen>  <!-- M3 最小可点区域 -->
+
+</resources>
