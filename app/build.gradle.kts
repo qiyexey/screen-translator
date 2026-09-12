@@ -30,8 +30,8 @@ android {
         applicationId = "com.hunter.screentranslator"
         minSdk = 26
         targetSdk = 34
-        versionCode = 24
-        versionName = "1.13.0"
+        versionCode = 25
+        versionName = "1.14.0"
 
         ndk {
             // v1.11.0：ML Kit 的 OCR 原生库每个 ABI 各带一份，四份合计约 41MB
