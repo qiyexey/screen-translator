@@ -112,6 +112,7 @@ class EngineSettingsActivity : BaseActivity() {
         b.layoutDeepl.visibility = if (engine == TranslationEngine.DEEPL) v else g
         b.layoutBaidu.visibility = if (engine == TranslationEngine.BAIDU) v else g
         b.layoutCaiyun.visibility = if (engine == TranslationEngine.CAIYUN) v else g
+        b.layoutBingWeb.visibility = if (engine == TranslationEngine.BING_WEB) v else g
     }
 
     /**
@@ -173,6 +174,8 @@ class EngineSettingsActivity : BaseActivity() {
             TranslationEngine.BAIDU ->
                 App.prefs.baiduAppId.isNotBlank() && App.prefs.baiduKey.isNotBlank()
             TranslationEngine.CAIYUN -> App.prefs.caiyunToken.isNotBlank()
+            // 免密钥引擎：永远算"已配置"
+            TranslationEngine.BING_WEB -> true
         }
         if (!keyReady) {
             toast("请先填写 $engineName 的密钥")

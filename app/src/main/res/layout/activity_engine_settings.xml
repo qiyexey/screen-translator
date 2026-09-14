@@ -546,6 +546,32 @@
                         android:textSize="10sp" />
                 </LinearLayout>
 
+                <!-- ===== 必应网页端（免密钥）说明区 ===== -->
+                <LinearLayout
+                    android:id="@+id/layoutBingWeb"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="无需密钥，选中即用。"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="走 bing.com/translator 网页自用的接口，免费。代价是非公开接口 —— 微软改版或限流时会失败（会如实报错，不假装成功）。\n\n注意：它只能翻文字。实时屏幕翻译要把截图交给能读图的模型，所以那个功能用不了这个引擎。"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
                 <!-- ===== 彩云小译配置区 ===== -->
                 <LinearLayout
                     android:id="@+id/layoutCaiyun"

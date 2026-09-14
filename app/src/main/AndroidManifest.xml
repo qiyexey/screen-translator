@@ -129,6 +129,16 @@
                 android:value="听视频实时翻译字幕" />
         </service>
 
+        <!-- v1.15.0：实时屏幕翻译（常驻 MediaProjection + 视觉模型 + 原位叠层） -->
+        <service
+            android:name=".service.LiveTranslateService"
+            android:exported="false"
+            android:foregroundServiceType="mediaProjection">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="实时屏幕翻译叠层" />
+        </service>
+
         <!-- v1.6.0：输入翻译 -->
         <activity
             android:name=".ui.TranslateInputActivity"
@@ -150,6 +160,12 @@
             android:exported="false"
             android:label="图片翻译"
             android:excludeFromRecents="true" />
+
+        <!-- v1.15.0：实时屏幕翻译控制页 -->
+        <activity
+            android:name=".ui.LiveTranslateActivity"
+            android:exported="false"
+            android:label="实时屏幕翻译" />
 
         <!-- v1.11.0：拍照翻译（CameraX 取景 + 端侧 OCR，照片不出设备） -->
         <activity

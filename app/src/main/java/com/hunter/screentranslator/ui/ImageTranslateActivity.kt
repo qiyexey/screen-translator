@@ -24,6 +24,7 @@ import androidx.lifecycle.lifecycleScope
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.api.TranslationEngine
 import com.hunter.screentranslator.api.TranslatorFactory
+import com.hunter.screentranslator.util.OcrEngine
 import com.hunter.screentranslator.util.HistoryStore
 import com.hunter.screentranslator.util.ScreenCapture
 import com.hunter.screentranslator.util.Speaker
@@ -158,13 +159,9 @@ class ImageTranslateActivity : AppCompatActivity() {
     // ==================== 截图授权（按需）====================
 
     private fun requestCapture() {
-        val engine = TranslationEngine.fromKey(App.prefs.engine)
-        if (!engine.visionCapable) {
-            tvStatus.text = "当前引擎「${engine.displayName}」不支持图片翻译。\n" +
-                "请在设置里切换到支持视觉的引擎（DeepSeek / OpenAI / Claude / 通义 / GLM / 豆包）。"
-            tvResult.text = ""
-            return
-        }
+        // v1.15.22：不再因为"引擎读不了图"就拦下来。
+        // 读不了图时会在下面自动改走「本机 OCR + 文本翻译」——
+        // 配免密钥的必应网页端就是一条完全免费的图片翻译链路。
         tvStatus.text = "正在申请屏幕截图权限…"
         val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
         startActivityForResult(mpm.createScreenCaptureIntent(), REQ_PROJECTION)
@@ -260,7 +257,24 @@ class ImageTranslateActivity : AppCompatActivity() {
             }
 
             val translator = TranslatorFactory.current()
-            val result = translator.translateImage(bytes, "image/jpeg", App.prefs.targetLang)
+            val engine = TranslationEngine.fromKey(App.prefs.engine)
+            val result = if (engine.visionCapable) {
+                translator.translateImage(bytes, "image/jpeg", App.prefs.targetLang)
+            } else {
+                // 引擎只能翻文字 → 在本机把图上的日文认出来，再走文本翻译。
+                // 识别不花钱、不联网、图片不出设备；只有认出的文字发给引擎。
+                tvStatus.text = "本机识别中（不走网络）…"
+                val lines = runCatching {
+                    withContext(Dispatchers.IO) { OcrEngine.recognizeJapanese(bmp) }
+                }.getOrElse { emptyList() }
+                val src = OcrEngine.toPlainText(lines)
+                if (src.isBlank()) {
+                    Result.failure(RuntimeException("本机没认出文字（换个引擎，或框得更准些）"))
+                } else {
+                    tvStatus.text = "识别到 ${lines.size} 行，正在翻译…"
+                    translator.translate(src, App.prefs.targetLang)
+                }
+            }
 
             translating = false
             progress.visibility = View.GONE

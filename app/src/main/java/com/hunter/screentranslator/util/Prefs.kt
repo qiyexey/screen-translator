@@ -142,6 +142,17 @@ class Prefs(context: Context) {
         get() = sp.getBoolean(KEY_CLIPBOARD_TRANSLATE, false)
         set(value) = sp.edit().putBoolean(KEY_CLIPBOARD_TRANSLATE, value).apply()
 
+    /**
+     * v1.15.10 迁移标记：修正"画面变化阈值"的错误默认值。
+     *
+     * 旧默认 8 远高于真实信号（2~5），老用户存下的 8 会让他们永远卡在
+     * "只翻译第一段"，且从界面上完全看不出原因。所以升级时**统一重置一次**，
+     * 而不是指望用户自己把滑杆拖到 1。
+     */
+    var migratedV11510: Boolean
+        get() = sp.getBoolean(KEY_MIGRATED_V11510, false)
+        set(value) = sp.edit().putBoolean(KEY_MIGRATED_V11510, value).apply()
+
     /** v1.2.0 迁移标记：老版本默认开了全屏自动翻译，升级后统一切到手动模式 */
     var migratedV12: Boolean
         get() = sp.getBoolean(KEY_MIGRATED_V12, false)
@@ -250,6 +261,125 @@ class Prefs(context: Context) {
         get() = sp.getInt(KEY_CACHE_MAX_ENTRIES, 500)
         set(value) = sp.edit().putInt(KEY_CACHE_MAX_ENTRIES, value).apply()
 
+    // ==================== v1.15.0：实时屏幕翻译叠层 ====================
+
+    /**
+     * 翻译区域（**屏幕绝对坐标**，格式 "left,top,right,bottom"；空串 = 还没框选）。
+     *
+     * 为什么存成一个字符串而不是四个 Int：这是一个**不可分割的整体**，
+     * 拆成四个键会出现"只写成功了一半"的中间态（例如竖屏框好的区域，
+     * 旋转后只更新了两个字段），读出来是个畸形矩形。整体读写不存在这个问题。
+     *
+     * 坐标是屏幕绝对坐标（与 RegionSelectView 的视图坐标一致），
+     * 因为框选遮罩铺满全屏且带 FLAG_LAYOUT_IN_SCREEN。
+     */
+    var liveRoi: String
+        get() = sp.getString(KEY_LIVE_ROI, "") ?: ""
+        set(value) = sp.edit().putString(KEY_LIVE_ROI, value).apply()
+
+    /**
+     * 取帧间隔（毫秒）。越小越跟手，但耗电、耗额度都线性上升。
+     *
+     * 默认 1000ms 是刻意偏保守的：GBA 这类剧本文本框出现后会停留数秒，
+     * 1 秒一轮完全够用；调快到 400ms 只在"菜单翻页很快"时才有意义。
+     */
+    var liveIntervalMs: Int
+        get() = sp.getInt(KEY_LIVE_INTERVAL_MS, 1000).coerceIn(400, 5000)
+        set(value) = sp.edit().putInt(KEY_LIVE_INTERVAL_MS, value.coerceIn(400, 5000)).apply()
+
+    /**
+     * 画面变化阈值（0~100，越大越迟钝）。低于阈值视为"画面没变"，不发请求。
+     *
+     * 语义是"**有多少百分比的格子明显变了**"（见 [FrameSignature.diff]），
+     * 不是平均亮度差 —— 平均差会被大片不变的背景稀释，导致换了新对白也判不出变化。
+     *
+     * 典型值：文本框停着不动 / 只有闪烁光标 → 0~1；换成新的一段对白 → 10~40。
+     * 默认 8 能把两者干净分开。
+     */
+    var liveDiffThreshold: Int
+        get() = sp.getInt(KEY_LIVE_DIFF_THRESHOLD, DEFAULT_LIVE_DIFF).coerceIn(1, 20)
+        set(value) = sp.edit()
+            .putInt(KEY_LIVE_DIFF_THRESHOLD, value.coerceIn(1, 20)).apply()
+
+    /**
+     * 译文叠层位置微调（dp）。默认 0。
+     *
+     * 为什么需要它：叠层的窗口坐标与框选遮罩的视图坐标未必同源
+     * （不同 ROM 对全屏悬浮窗的原点处理不一致，状态栏/挖孔/导航栏都可能造成
+     * 一个**常量偏移**）。与其赌某个 ROM 的规则，不如给用户一个直接能用的校正口
+     * —— 看到偏了多少就调回来。v1.15.4 同时去掉了 FLAG_LAYOUT_NO_LIMITS
+     * （它会让窗口原点跑到屏幕外，是偏移的经典成因），这里是兜底。
+     */
+    var liveNudgeX: Int
+        get() = sp.getInt(KEY_LIVE_NUDGE_X, 0).coerceIn(-NUDGE_LIMIT_DP, NUDGE_LIMIT_DP)
+        set(value) = sp.edit()
+            .putInt(KEY_LIVE_NUDGE_X, value.coerceIn(-NUDGE_LIMIT_DP, NUDGE_LIMIT_DP)).apply()
+
+    var liveNudgeY: Int
+        get() = sp.getInt(KEY_LIVE_NUDGE_Y, 0).coerceIn(-NUDGE_LIMIT_DP, NUDGE_LIMIT_DP)
+        set(value) = sp.edit()
+            .putInt(KEY_LIVE_NUDGE_Y, value.coerceIn(-NUDGE_LIMIT_DP, NUDGE_LIMIT_DP)).apply()
+
+    /**
+     * 译文放哪：`edge`（默认，贴在选区外侧，**不盖住选区**）/ `cover`（原位覆盖）。
+     *
+     * v1.15.7 默认改成 `edge`，因为 `cover` 有一个绕不开的代价：
+     * **覆盖模式必须每轮把叠层藏起来才能拍到下面的游戏画面**，于是叠层会周期性闪烁
+     * （实测"一直在闪，不行"）。贴边模式根本不遮挡选区，因此**不需要隐藏 → 不闪**，
+     * 同时还顺手消掉了"截到自己"的整个问题类。
+     * 想要原位覆盖（画面更"原生"）的用户可以手动打开，代价如实标注在设置项上。
+     */
+    var liveOverlayMode: String
+        get() = sp.getString(KEY_LIVE_OVERLAY_MODE, LiveOverlayMode.EDGE)
+            ?: LiveOverlayMode.EDGE
+        set(value) = sp.edit()
+            .putString(KEY_LIVE_OVERLAY_MODE, LiveOverlayMode.normalize(value)).apply()
+
+    /**
+     * 译文面板背景不透明度：0.15 ~ 1.0（v1.15.19）。
+     *
+     * 只在**贴边模式**下真正放开 —— 那种模式叠层不遮挡选区，透明多少都不影响取帧。
+     * 原位覆盖模式下会强制拉回接近不透明：半透明会让"藏起来/露出来"两帧差异过小，
+     * 自捕获校验就失效了（这是 v1.15.4 误报的根因），而且原文会透出来、两边都读不清。
+     */
+    var liveOverlayAlpha: Float
+        get() = sp.getFloat(KEY_LIVE_OVERLAY_ALPHA, 0.95f).coerceIn(0.15f, 1f)
+        set(value) = sp.edit()
+            .putFloat(KEY_LIVE_OVERLAY_ALPHA, value.coerceIn(0.15f, 1f)).apply()
+
+    /**
+     * 译文面板宽度（**屏宽百分比**，0 = 跟随选区）（v1.15.27）。
+     *
+     * 用"屏宽百分比"而不是 dp：用户想的是"占屏幕多宽"，不是"多少 dp"；
+     * 而且换设备后百分比仍然合适，dp 不会。
+     * 0 是特殊值 = 跟随选区宽度 —— 默认保持原行为，不动滑杆就完全不变。
+     */
+    var livePanelWPercent: Int
+        get() = sp.getInt(KEY_LIVE_PANEL_W, 0).coerceIn(0, 100)
+        set(value) = sp.edit().putInt(KEY_LIVE_PANEL_W, value.coerceIn(0, 100)).apply()
+
+    /** 译文面板高度（屏高百分比，0 = 跟随选区） */
+    var livePanelHPercent: Int
+        get() = sp.getInt(KEY_LIVE_PANEL_H, 0).coerceIn(0, 40)
+        set(value) = sp.edit().putInt(KEY_LIVE_PANEL_H, value.coerceIn(0, 40)).apply()
+
+    /** 译文面板字号缩放：0.6 ~ 1.8（1.0 为默认）（v1.15.19） */
+    var liveTextScale: Float
+        get() = sp.getFloat(KEY_LIVE_TEXT_SCALE, 1f).coerceIn(0.6f, 1.8f)
+        set(value) = sp.edit()
+            .putFloat(KEY_LIVE_TEXT_SCALE, value.coerceIn(0.6f, 1.8f)).apply()
+
+    /**
+     * 译文叠层是否接收触摸。**默认关**。
+     *
+     * 开着的话叠层会盖住整个翻译区域并吃掉那里的一切触摸——对手游/模拟器来说
+     * 等于把屏幕上一块操作区变哑。默认必须关，否则"能翻译但玩不了"。
+     * 需要的用户可以打开，换取"按住叠层看原文"这个手势。
+     */
+    var liveOverlayTouchable: Boolean
+        get() = sp.getBoolean(KEY_LIVE_OVERLAY_TOUCHABLE, false)
+        set(value) = sp.edit().putBoolean(KEY_LIVE_OVERLAY_TOUCHABLE, value).apply()
+
     companion object {
         private const val KEY_API_KEY = "api_key"
         private const val KEY_BASE_URL = "base_url"
@@ -281,6 +411,7 @@ class Prefs(context: Context) {
         private const val KEY_CLIPBOARD_TRANSLATE = "clipboard_translate"
         private const val KEY_MIGRATED_V12 = "migrated_v12"
         private const val KEY_MIGRATED_V121 = "migrated_v121"
+        private const val KEY_MIGRATED_V11510 = "migrated_v11510"
         private const val KEY_BALL_ALPHA = "ball_alpha"
         private const val KEY_BALL_SIZE = "ball_size"
         private const val KEY_BALL_COLOR = "ball_color"
@@ -298,7 +429,63 @@ class Prefs(context: Context) {
         private const val KEY_TTS_SOURCE_LANG = "tts_source_lang"
         private const val KEY_CACHE_ENABLED = "cache_enabled"
         private const val KEY_CACHE_MAX_ENTRIES = "cache_max_entries"
+        private const val KEY_LIVE_ROI = "live_roi"
+        private const val KEY_LIVE_INTERVAL_MS = "live_interval_ms"
+        private const val KEY_LIVE_DIFF_THRESHOLD = "live_diff_threshold"
+        private const val KEY_LIVE_OVERLAY_TOUCHABLE = "live_overlay_touchable"
+        private const val KEY_LIVE_NUDGE_X = "live_nudge_x"
+        private const val KEY_LIVE_NUDGE_Y = "live_nudge_y"
+
+        /**
+         * 位置微调上限（dp）。
+         *
+         * 原来只有 ±80dp —— 实测**远远不够**：约屏高的 1/10，从对话框挪进下方那片
+         * 黑区需要 200dp 以上，用户反馈"80 有点少，很容易就盖住游戏画面"。
+         * 现在放到 ±400dp（约屏高的 2/3），配合默认"选余量更大的一侧"，基本够用。
+         */
+        /**
+         * 位置偏移的**存储**上限（dp）。
+         *
+         * v1.15.13 从 400 提到 2000：拖动是"用户直接摆到想要的位置"，
+         * 再拿 400dp 去裁就变成"拖了会被弹回来"（用户反馈"不能随意拖动"）。
+         * 真正该做的约束是"别把框丢到屏幕外"，那是摆放时钳制的，不该在存储层卡死。
+         */
+        const val NUDGE_LIMIT_DP = 2000
+
+        /**
+         * 滑杆可调范围（dp）。比存储上限小得多 ——
+         * 滑杆是"细调"用的，给 2000 格只会让人拖不准；拖动才是"任意摆位"的正路。
+         */
+        const val NUDGE_SLIDER_DP = 400
+
+        /**
+         * 画面变化阈值的默认值（v1.15.10 重新定标）。
+         *
+         * **原默认值是 8，定错了。** 真机实测：整句对白换掉时 Δ 只有 2~5，
+         * 而噪声（抖动、闪烁光标）是 0 —— 所以正确的分界线在 1 附近，不是 8。
+         * 阈值 8 等于"永远判定没变"，用户看到的就是"只翻译第一段、之后停在原文"。
+         */
+        const val DEFAULT_LIVE_DIFF = 1
+        private const val KEY_LIVE_OVERLAY_MODE = "live_overlay_mode"
+        private const val KEY_LIVE_OVERLAY_ALPHA = "live_overlay_alpha"
+        private const val KEY_LIVE_TEXT_SCALE = "live_text_scale"
+        private const val KEY_LIVE_PANEL_W = "live_panel_w"
+        private const val KEY_LIVE_PANEL_H = "live_panel_h"
     }
+}
+
+/**
+ * 译文叠层显示模式（v1.15.7）。
+ *
+ * 存字符串而不是布尔：将来若要加第三种（比如"左上角固定"）不用改数据格式。
+ */
+object LiveOverlayMode {
+    /** 贴在选区外侧，不遮挡选区 —— 默认，且是唯一不闪的模式 */
+    const val EDGE = "edge"
+    /** 原位覆盖原文 —— 更接近"原生汉化"的观感，但叠层需周期性隐藏，会闪 */
+    const val COVER = "cover"
+
+    fun normalize(v: String?): String = if (v == COVER) COVER else EDGE
 }
 
 /**

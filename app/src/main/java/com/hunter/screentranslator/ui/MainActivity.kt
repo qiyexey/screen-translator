@@ -9,6 +9,7 @@ import android.provider.Settings
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.api.LANG_DISPLAY
 import com.hunter.screentranslator.databinding.ActivityMainBinding
 
 /**
@@ -48,6 +49,18 @@ class MainActivity : BaseActivity() {
         }
         b.btnHistory.setOnClickListener {
             startActivity(Intent(this, HistoryActivity::class.java))
+        }
+        // v1.15.0：实时屏幕翻译。与「图片翻译」的区别是"常驻闭环"而不是"抓一帧"——
+        // 适合模拟器/游戏这类画面一直在变、但文字反复出现的场景。
+        b.btnLiveTranslate.setOnClickListener {
+            startActivity(Intent(this, LiveTranslateActivity::class.java))
+        }
+
+        // v1.15.24：语言对那一行（对齐 Google 翻译的标志性布局）
+        // 显示的是**真实**的目标语言，不是装饰文案；交换键用来进设置改语言。
+        b.tvTargetLang.text = LANG_DISPLAY[App.prefs.targetLang] ?: App.prefs.targetLang
+        b.btnSwapLang.setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
         }
 
         // ---- 设置与权限 ----

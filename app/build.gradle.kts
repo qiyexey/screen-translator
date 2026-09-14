@@ -30,8 +30,8 @@ android {
         applicationId = "com.hunter.screentranslator"
         minSdk = 26
         targetSdk = 34
-        versionCode = 25
-        versionName = "1.14.0"
+        versionCode = 55
+        versionName = "1.16.1"
 
         ndk {
             // v1.11.0：ML Kit 的 OCR 原生库每个 ABI 各带一份，四份合计约 41MB
@@ -61,7 +61,9 @@ android {
         release {
             isMinifyEnabled = false
             // 只有口令齐备时才挂签名配置，否则打到未签名包（不再因缺口令而构建失败）
+            // 无口令时退回 debug 签名（未签名 APK 装不上；但它不是发布签名）
             signingConfig = signingConfigs.findByName("release")
+                ?: signingConfigs.findByName("debug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -110,4 +112,8 @@ dependencies {
     // play-services 变体体积小，但依赖 GMS 运行时下载模型，国行机器上可能直接不可用。
     implementation("com.google.mlkit:text-recognition:16.0.1")
     implementation("com.google.mlkit:text-recognition-chinese:16.0.1")
+    // v1.15.15：日文模型。用途是"端侧 OCR + 免费文本翻译"这条链路
+    //（实时屏幕翻译若走视觉模型要按次计费；改成本机认字 + 必应翻译则零费用）。
+    // 与中文模型同样是 bundled 变体，运行时不需要 GMS。
+    implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
 }

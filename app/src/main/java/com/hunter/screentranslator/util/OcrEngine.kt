@@ -6,6 +6,7 @@ import android.util.Log
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.text.TextRecognition
 import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
+import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
 
@@ -36,6 +37,42 @@ object OcrEngine {
     private val recognizer by lazy {
         TextRecognition.getClient(ChineseTextRecognizerOptions.Builder().build())
     }
+
+    /**
+     * 日文识别器（v1.15.15）。
+     *
+     * 与中文识别器**必须分开**：ML Kit 的识别模型是按脚本分的，中文模型认不了假名，
+     * 这也是当初"识别不到日文"的根因（依赖里根本没装日文模型，不是参数问题）。
+     */
+    private val japaneseRecognizer by lazy {
+        TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
+    }
+
+    /** 用日文模型识别整张位图（识别失败返回空列表，由调用方决定怎么告知用户） */
+    suspend fun recognizeJapanese(bitmap: Bitmap): List<Line> =
+        suspendCancellableCoroutine { cont ->
+            val image = runCatching { InputImage.fromBitmap(bitmap, 0) }.getOrNull()
+            if (image == null) {
+                cont.resume(emptyList())
+                return@suspendCancellableCoroutine
+            }
+            japaneseRecognizer.process(image)
+                .addOnSuccessListener { result ->
+                    val lines = ArrayList<Line>()
+                    for (block in result.textBlocks) {
+                        for (line in block.lines) {
+                            val box = line.boundingBox ?: continue
+                            val t = line.text
+                            if (t.isNotBlank()) lines.add(Line(t, box))
+                        }
+                    }
+                    if (cont.isActive) cont.resume(lines)
+                }
+                .addOnFailureListener { e ->
+                    Log.w(TAG, "日文 OCR 失败: $e")
+                    if (cont.isActive) cont.resume(emptyList())
+                }
+        }
 
     /**
      * 识别整张位图。

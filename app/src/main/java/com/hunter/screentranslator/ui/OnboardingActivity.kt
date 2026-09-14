@@ -220,6 +220,8 @@ class OnboardingActivity : BaseActivity() {
         TranslationEngine.DEEPL -> App.prefs.deeplApiKey.isNotBlank()
         TranslationEngine.BAIDU -> App.prefs.baiduAppId.isNotBlank()
         TranslationEngine.CAIYUN -> App.prefs.caiyunToken.isNotBlank()
+        // 免密钥引擎：引导页里也应算"已可翻译"，否则用户选了它还会被提示去填密钥
+        TranslationEngine.BING_WEB -> true
     }
 
     /** Android 13+ 侧载 APK 的无障碍开关是"受限设置"，先讲清怎么解锁再去 */

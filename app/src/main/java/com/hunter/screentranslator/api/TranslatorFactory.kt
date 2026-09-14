@@ -75,6 +75,8 @@ object TranslatorFactory {
             TranslationEngine.DEEPL -> DeepLTranslatorEngine() to "deepl.com"
             TranslationEngine.BAIDU -> BaiduTranslator() to "fanyi-api.baidu.com"
             TranslationEngine.CAIYUN -> CaiyunTranslator() to "api.interpreter.caiyunai.com"
+            // 免密钥：会话由网页端现场引导，作用域固定（换不了端点）
+            TranslationEngine.BING_WEB -> BingWebTranslator() to "bing.com/translator"
         }
         return CachingTranslator(built.first, engine.key + "|" + built.second)
     }

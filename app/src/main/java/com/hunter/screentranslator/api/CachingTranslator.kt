@@ -46,6 +46,7 @@ class CachingTranslator(
     override suspend fun translateImage(
         imageBytes: ByteArray,
         mimeType: String,
-        targetLang: String
-    ): Result<String> = delegate.translateImage(imageBytes, mimeType, targetLang)
+        targetLang: String,
+        hint: String?
+    ): Result<String> = delegate.translateImage(imageBytes, mimeType, targetLang, hint)
 }

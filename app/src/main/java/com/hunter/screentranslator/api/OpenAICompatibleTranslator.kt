@@ -38,7 +38,8 @@ open class OpenAICompatibleTranslator(
     override suspend fun translateImage(
         imageBytes: ByteArray,
         mimeType: String,
-        targetLang: String
+        targetLang: String,
+        hint: String?
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             require(apiKey.isNotBlank()) { "未配置 $engineName API Key" }
@@ -60,7 +61,7 @@ open class OpenAICompatibleTranslator(
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
-                        put("content", buildImageSystemPrompt(targetName))
+                        put("content", buildImageSystemPrompt(targetName, hint))
                     })
                     put(JSONObject().apply {
                         put("role", "user")
@@ -171,19 +172,28 @@ open class OpenAICompatibleTranslator(
         现在请翻译：
     """.trimIndent()
 
-    /** v1.8.0 图片翻译用的系统提示词：强调"只翻画面里的文字" */
-    private fun buildImageSystemPrompt(targetName: String): String = """
-        你是一个专业的屏幕翻译引擎。用户会给你一张手机屏幕截图，你需要：
+    /**
+     * v1.8.0 图片翻译用的系统提示词：强调"只翻画面里的文字"。
+     *
+     * v1.15.0 支持 [hint]（调用场景说明）。这里刻意**把 hint 拼在基础提示词之外**，
+     * 而不是直接塞进 `"""..."""` 里做插值：trimIndent() 是在插值**之后**才执行的，
+     * 插入内容里的换行会参与"最小缩进"的计算，导致整段提示词的缩进被意外改写。
+     * 拼在外面就不存在这个问题。
+     */
+    private fun buildImageSystemPrompt(targetName: String, hint: String? = null): String {
+        val base = """
+            你是一个专业的屏幕翻译引擎。用户会给你一张手机屏幕截图，你需要：
 
-        1. 读出画面里所有可见的文字（含 UI 按钮、菜单、正文、字幕）。
-        2. 把这些文字翻译成【$targetName】。
-        3. 只输出译文，不要描述画面、不要解释、不要加"翻译如下"之类的开场白。
-        4. 如果画面里有多段文字，按阅读顺序（自上而下、自左而右）分行输出译文。
-        5. 如果画面里没有任何文字，只输出：没有识别到文字
-        6. 保留原文的换行与段落结构；UI 短标签译得简洁，长段落译得自然。
-
-        现在请翻译画面里的文字：
-    """.trimIndent()
+            1. 读出画面里所有可见的文字（含 UI 按钮、菜单、正文、字幕）。
+            2. 把这些文字翻译成【$targetName】。
+            3. 只输出译文，不要描述画面、不要解释、不要加"翻译如下"之类的开场白。
+            4. 如果画面里有多段文字，按阅读顺序（自上而下、自左而右）分行输出译文。
+            5. 如果画面里没有任何文字，只输出：没有识别到文字
+            6. 保留原文的换行与段落结构；UI 短标签译得简洁，长段落译得自然。
+        """.trimIndent()
+        val extra = if (hint.isNullOrBlank()) "" else "\n\n【本次输入的特殊说明】\n$hint"
+        return "$base$extra\n\n现在请翻译画面里的文字："
+    }
 
     companion object {
         /** 视觉请求的输出上限：长截图的长译文需要足够空间，否则会被截断 */

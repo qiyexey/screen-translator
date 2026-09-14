@@ -15,11 +15,18 @@ interface Translator {
      * 这样设计是为了**避免静默失败**：视觉能力是逐模型的（例如 qwen3.7-plus 支持
      * 而 qwen-plus / glm-4-flash 不支持），如果不支持却仍把图片塞进请求，
      * 上游要么报错、要么忽略图片只翻译提示词，用户完全无法理解发生了什么。
+     *
+     * v1.15.0 新增 [hint]：**调用场景的额外说明**（可为 null）。
+     * 同一个视觉通道要服务两种差别很大的输入 —— 图片翻译是"手机截图，印刷体、
+     * 字号正常"，实时翻译是"模拟器里的复古游戏画面，低分辨率点阵字、有扫描线"。
+     * 对后者，一句"这是游戏画面、按短译文处理"能明显压低识别失败率与译文啰嗦度。
+     * 不传就完全沿用原来的提示词，所以既有调用点零改动。
      */
     suspend fun translateImage(
         imageBytes: ByteArray,
         mimeType: String,
-        targetLang: String
+        targetLang: String,
+        hint: String? = null
     ): Result<String> = Result.failure(
         UnsupportedOperationException("当前翻译引擎不支持图片输入，请在设置里换用支持视觉的模型")
     )
@@ -56,7 +63,13 @@ enum class TranslationEngine(
     MICROSOFT("microsoft", "微软翻译"),
     DEEPL("deepl", "DeepL 翻译"),
     BAIDU("baidu", "百度翻译"),
-    CAIYUN("caiyun", "彩云小译");
+    CAIYUN("caiyun", "彩云小译"),
+
+    /**
+     * 必应网页端：**免密钥、免费**，但走的是 bing.com 网页自用的非公开接口，
+     * 且**只能翻文字**（不接受图片），所以实时屏幕翻译用不了它。
+     */
+    BING_WEB("bingweb", "必应网页（免费 · 仅文字）");
 
     companion object {
         fun fromKey(key: String): TranslationEngine =

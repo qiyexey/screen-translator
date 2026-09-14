@@ -31,7 +31,8 @@ class ClaudeTranslator(
     override suspend fun translateImage(
         imageBytes: ByteArray,
         mimeType: String,
-        targetLang: String
+        targetLang: String,
+        hint: String?
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             require(imageBytes.isNotEmpty()) { "图片数据为空" }
@@ -51,7 +52,8 @@ class ClaudeTranslator(
                     "system",
                     "你是屏幕翻译引擎。读出用户给的截图里所有可见文字并翻译成【$targetName】。" +
                         "只输出译文，按阅读顺序分行；不要描述画面、不要解释。" +
-                        "画面里没有文字时只输出：没有识别到文字"
+                        "画面里没有文字时只输出：没有识别到文字" +
+                        if (hint.isNullOrBlank()) "" else "\n【本次输入的特殊说明】\n$hint"
                 )
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
