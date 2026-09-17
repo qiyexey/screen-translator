@@ -17,6 +17,9 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.api.TranslationEngine
+import com.hunter.screentranslator.util.HyMtModelStatus
+import com.hunter.screentranslator.util.HyMtModelStore
+import com.hunter.screentranslator.util.HyMtQuant
 
 /**
  * v1.13.0 首次引导。
@@ -201,6 +204,8 @@ class OnboardingActivity : BaseActivity() {
                 tvStatus.visibility = View.VISIBLE
                 tvStatus.text =
                     if (filled) "✅ 已配置「${TranslationEngine.fromKey(App.prefs.engine).displayName}」"
+                    else if (TranslationEngine.fromKey(App.prefs.engine) == TranslationEngine.HYMT_LOCAL)
+                        "❌ 本地模型还没下载（设置 → 翻译引擎 → 腾讯 Hy-MT2）"
                     else "❌ 还没有任何引擎配置了密钥"
                 tvStatus.setTextColor(if (filled) ok else bad)
             }
@@ -222,6 +227,10 @@ class OnboardingActivity : BaseActivity() {
         TranslationEngine.CAIYUN -> App.prefs.caiyunToken.isNotBlank()
         // 免密钥引擎：引导页里也应算"已可翻译"，否则用户选了它还会被提示去填密钥
         TranslationEngine.BING_WEB -> true
+        // v1.17.0 本地大模型同样免密钥，但判据变成"模型文件是否已就绪" ——
+        // 没有它，用户在引导页会看到"已配置"，点翻译才发现模型根本没下载。
+        TranslationEngine.HYMT_LOCAL ->
+            HyMtModelStore.status(HyMtQuant.fromId(App.prefs.hymtQuant)) is HyMtModelStatus.Ready
     }
 
     /** Android 13+ 侧载 APK 的无障碍开关是"受限设置"，先讲清怎么解锁再去 */

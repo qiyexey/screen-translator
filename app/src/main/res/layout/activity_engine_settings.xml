@@ -572,6 +572,189 @@
                         android:textSize="10sp" />
                 </LinearLayout>
 
+                <!-- ===== v1.17.0 本地大模型（腾讯 Hy-MT2-1.8B，端侧 llama.cpp）===== -->
+                <LinearLayout
+                    android:id="@+id/layoutHyMtLocal"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:visibility="gone">
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="完全在本机运行 —— 无密钥、无额度、断网可用"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="模型在手机 CPU 上推理，译文不出设备。代价：比云端慢（首句还要多等几秒加载模型）、更耗电 —— 它是离线兜底，不是更快的那条路。\n\n图片翻译用不了它（纯文本模型），会自动走「本机 OCR 认字 → 本地翻译」。"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="10sp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="量化档（越大越准、越慢、越占内存）"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <Spinner
+                        android:id="@+id/spinnerHyMtQuant"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="下载源（同一份文件，实测速度差 12 倍）"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="12sp" />
+
+                    <Spinner
+                        android:id="@+id/spinnerHyMtSource"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="8dp">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="推理线程"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp" />
+
+                            <Spinner
+                                android:id="@+id/spinnerHyMtThreads"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content" />
+                        </LinearLayout>
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:layout_marginStart="10dp"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="上下文长度"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="12sp" />
+
+                            <Spinner
+                                android:id="@+id/spinnerHyMtContext"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/tvHyMtStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="10dp"
+                        android:text="模型状态：未下载"
+                        android:textColor="@color/text_primary"
+                        android:textSize="12sp" />
+
+                    <ProgressBar
+                        android:id="@+id/progressHyMt"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:max="100"
+                        android:visibility="gone" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnHyMtDownload"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:text="下载模型"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnHyMtImport"
+                        style="@style/Widget.ScreenTranslator.Button.Outlined"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="从文件导入 gguf（自备模型）"
+                        android:textColor="@color/accent"
+                        android:textSize="13sp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginTop="6dp">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnHyMtPreload"
+                            style="@style/Widget.ScreenTranslator.Button.Outlined"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_height="wrap_content"
+                            android:text="预加载"
+                            android:textColor="@color/accent"
+                            android:textSize="13sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnHyMtUnload"
+                            style="@style/Widget.ScreenTranslator.Button.Outlined"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_marginStart="6dp"
+                            android:layout_height="wrap_content"
+                            android:text="卸载"
+                            android:textColor="@color/accent"
+                            android:textSize="13sp" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnHyMtDelete"
+                            style="@style/Widget.ScreenTranslator.Button.Outlined"
+                            android:layout_width="0dp"
+                            android:layout_weight="1"
+                            android:layout_marginStart="6dp"
+                            android:layout_height="wrap_content"
+                            android:text="删除文件"
+                            android:textColor="@color/accent"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:text="换量化档后会自动重新加载；模型闲置 5 分钟或系统内存吃紧时会自动卸载。"
+                        android:textColor="@color/text_secondary"
+                        android:textSize="10sp" />
+                </LinearLayout>
+
                 <!-- ===== 彩云小译配置区 ===== -->
                 <LinearLayout
                     android:id="@+id/layoutCaiyun"

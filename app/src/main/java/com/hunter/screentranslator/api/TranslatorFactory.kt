@@ -1,6 +1,8 @@
 package com.hunter.screentranslator.api
 
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.util.HyMtModelStore
+import com.hunter.screentranslator.util.HyMtQuant
 import okhttp3.HttpUrl.Companion.toHttpUrl
 
 /**
@@ -17,6 +19,13 @@ object TranslatorFactory {
         // 第二项是「缓存作用域」的细粒度部分（端点 + 模型）。换中转、换模型、换区域后
         // 译文可能不同，不能复用老译文；同名模型挂在不同中转后端上甚至可能是两套服务。
         val built: Pair<Translator, String> = when (engine) {
+            TranslationEngine.HYMT_LOCAL -> {
+                val q = HyMtQuant.fromId(App.prefs.hymtQuant)
+                // 缓存作用域带上模型文件长度：用户若用「导入」换了同名的自定义 gguf，
+                // 译文可能不同，不能复用老缓存（与 DeepSeek 那行"换中转/换模型"同理）。
+                val len = runCatching { HyMtModelStore.fileFor(q).length() }.getOrDefault(0L)
+                HyMtLocalTranslator(q) to ("local|hymt|${q.id}|$len|c${App.prefs.hymtContext}")
+            }
             TranslationEngine.DEEPSEEK -> {
                 val base = App.prefs.baseUrl.ifBlank { "https://api.deepseek.com" }
                 val m = App.prefs.model.ifBlank { "deepseek-chat" }

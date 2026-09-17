@@ -112,6 +112,33 @@ class Prefs(context: Context) {
         get() = sp.getString(KEY_CAIYUN_TOKEN, "") ?: ""
         set(value) = sp.edit().putString(KEY_CAIYUN_TOKEN, value).apply()
 
+    // ---- v1.17.0 本地大模型（腾讯 Hy-MT2-1.8B，端侧 llama.cpp）----
+
+    /** 量化档 id（见 [com.hunter.screentranslator.util.HyMtQuant]） */
+    var hymtQuant: String
+        get() = sp.getString(KEY_HYMT_QUANT, "q4_k_m") ?: "q4_k_m"
+        set(value) = sp.edit().putString(KEY_HYMT_QUANT, value).apply()
+
+    /** 模型下载源 id（modelscope / huggingface） */
+    var hymtSource: String
+        get() = sp.getString(KEY_HYMT_SOURCE, "modelscope") ?: "modelscope"
+        set(value) = sp.edit().putString(KEY_HYMT_SOURCE, value).apply()
+
+    /** 推理线程数；0 = 自动（核数 - 2，夹在 2~6） */
+    var hymtThreads: Int
+        get() = sp.getInt(KEY_HYMT_THREADS, 0)
+        set(value) = sp.edit().putInt(KEY_HYMT_THREADS, value.coerceIn(0, 8)).apply()
+
+    /** 上下文长度（tokens）。屏幕翻译都是短句，2048 足够；调大只会多吃内存 */
+    var hymtContext: Int
+        get() = sp.getInt(KEY_HYMT_CONTEXT, 2048)
+        set(value) = sp.edit().putInt(KEY_HYMT_CONTEXT, value.coerceIn(512, 8192)).apply()
+
+    /** 闲置多少分钟后自动卸载模型；0 = 不卸（模型常驻约 1.5GB 内存） */
+    var hymtIdleUnloadMinutes: Int
+        get() = sp.getInt(KEY_HYMT_IDLE_UNLOAD, 5)
+        set(value) = sp.edit().putInt(KEY_HYMT_IDLE_UNLOAD, value.coerceIn(0, 120)).apply()
+
     /** 目标语言代码：zh / en / ja / ko ... */
     var targetLang: String
         get() = sp.getString(KEY_TARGET_LANG, "zh") ?: "zh"
@@ -428,6 +455,12 @@ class Prefs(context: Context) {
         private const val KEY_TTS_CONTENT = "tts_content"
         private const val KEY_TTS_SOURCE_LANG = "tts_source_lang"
         private const val KEY_CACHE_ENABLED = "cache_enabled"
+        // v1.17.0 本地大模型
+        private const val KEY_HYMT_QUANT = "hymt_quant"
+        private const val KEY_HYMT_SOURCE = "hymt_source"
+        private const val KEY_HYMT_THREADS = "hymt_threads"
+        private const val KEY_HYMT_CONTEXT = "hymt_context"
+        private const val KEY_HYMT_IDLE_UNLOAD = "hymt_idle_unload"
         private const val KEY_CACHE_MAX_ENTRIES = "cache_max_entries"
         private const val KEY_LIVE_ROI = "live_roi"
         private const val KEY_LIVE_INTERVAL_MS = "live_interval_ms"

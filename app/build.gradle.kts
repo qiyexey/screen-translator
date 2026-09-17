@@ -30,8 +30,8 @@ android {
         applicationId = "com.hunter.screentranslator"
         minSdk = 26
         targetSdk = 34
-        versionCode = 55
-        versionName = "1.16.1"
+        versionCode = 56
+        versionName = "1.17.0"
 
         ndk {
             // v1.11.0：ML Kit 的 OCR 原生库每个 ABI 各带一份，四份合计约 41MB
@@ -116,4 +116,16 @@ dependencies {
     //（实时屏幕翻译若走视觉模型要按次计费；改成本机认字 + 必应翻译则零费用）。
     // 与中文模型同样是 bundled 变体，运行时不需要 GMS。
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
+
+    // v1.17.0：本地大模型（腾讯 Hy-MT2-1.8B）的推理运行时。
+    //
+    // 这里只引入 llama-kotlin-android 的 **Kotlin API 层**（app/libs 下的 classes.jar），
+    // native 的 libllama-android.so 由本工程自编（app/src/main/jniLibs/，源码见 jni/）。
+    //
+    // 为什么不直接依赖 Maven 上的 AAR：它带的 .so 是按 armv8-a 基线编的
+    // （反汇编确认 sdot/smmla 指令数为 0），实测整句延迟是自编版的 2.25 倍
+    // （2.25s vs 1.00s）。另外它的 POM 会经 androidx.core:core-ktx:1.17.0
+    // 把工程现用的 1.13.1 顶上去，进而要求 compileSdk 36 + AGP 8.9.1+ ——
+    // 换成 vendored jar 后这个传递依赖也随之消失。
+    implementation(files("libs/llama-kotlin-android-0.1.7-classes.jar"))
 }

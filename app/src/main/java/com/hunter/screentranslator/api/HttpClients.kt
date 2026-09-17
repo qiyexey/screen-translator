@@ -49,4 +49,19 @@ object HttpClients {
             .callTimeout(180, TimeUnit.SECONDS)
             .build()
     }
+
+    /**
+     * 模型下载（v1.17.0）：**不限总时长**。
+     *
+     * 单独一个池的理由与其它池不同：前三个池的 callTimeout 是"防挂死"，
+     * 而 1.13GB 的 gguf 走 [llm] 的 90 秒总时长等于必然失败 —— 且失败发生在
+     * 下到一半时，用户看到"下载失败"根本联想不到超时设置。
+     */
+    val download: OkHttpClient by lazy {
+        standard.newBuilder()
+            // readTimeout 是"两次读之间"的上限（不是总时长）：卡死 30 秒没数据才算断
+            .readTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(0, TimeUnit.MILLISECONDS)
+            .build()
+    }
 }

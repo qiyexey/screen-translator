@@ -53,6 +53,17 @@ enum class TranslationEngine(
     val displayName: String,
     val visionCapable: Boolean = false
 ) {
+    /**
+     * v1.17.0 腾讯 Hy-MT2-1.8B：**唯一完全在本机跑**的引擎（llama.cpp，CPU 推理）。
+     *
+     * 无密钥、无额度、断网可用；代价是比云端慢、更耗电 —— 定位是离线/隐私兜底，
+     * 不是"更快"。实测数据见 FIXES-1.17.0.md。
+     *
+     * [visionCapable] = false：它是纯文本翻译模型。图片翻译/实时读屏会自动走
+     * "本机 OCR 认字 → 本地翻译"那条既有链路（LiveTranslateService、
+     * ImageTranslateActivity 均已按 visionCapable 分支）。
+     */
+    HYMT_LOCAL("hymt-local", "腾讯 Hy-MT2 1.8B（本地·离线）"),
     DEEPSEEK("deepseek", "DeepSeek（AI）", visionCapable = true),
     OPENAI("openai", "OpenAI GPT（AI）", visionCapable = true),
     CLAUDE("claude", "Claude（AI）", visionCapable = true),

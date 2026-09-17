@@ -1,6 +1,8 @@
 package com.hunter.screentranslator
 
 import android.app.Application
+import android.content.ComponentCallbacks2
+import com.hunter.screentranslator.api.HyMtRuntime
 import com.hunter.screentranslator.util.HistoryStore
 import com.hunter.screentranslator.util.Prefs
 import com.hunter.screentranslator.util.TranslationCache
@@ -35,6 +37,20 @@ class App : Application() {
         if (!prefs.migratedV121) {
             prefs.migratedV121 = true
             prefs.selectionTranslate = false
+        }
+    }
+
+    /**
+     * v1.17.0：本地大模型（Hy-MT2）加载后常驻约 1.5GB。系统内存吃紧时**主动卸掉它**。
+     *
+     * 为什么必须这么做：本 App 的悬浮窗、读屏服务、实时翻译都跑在这个进程里，
+     * 若因为一个"可以重新加载"的模型而被 LMK 杀掉，用户失去的是正在用的翻译能力 ——
+     * 卸载模型只损失几秒的重新加载时间，取舍很明显。
+     */
+    override fun onTrimMemory(level: Int) {
+        super.onTrimMemory(level)
+        if (level >= ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
+            HyMtRuntime.unloadAsync()
         }
     }
 
