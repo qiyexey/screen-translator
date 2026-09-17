@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -151,6 +152,30 @@ object HyMtModelStore {
      * 为什么必须支持续传：1.13GB 在手机网络上是"大概率会中断"的量级，
      * 不支持续传等于每次网络抖动都从头再来一遍。
      */
+    /**
+     * HTTP 非 2xx。带状态码是为了区分"该不该重试"：
+     * 5xx/408/429 是服务端临时问题，值得再来一次；4xx（除 408/429）重试没意义。
+     */
+    private class HttpStatusException(val code: Int, message: String) : RuntimeException(message)
+
+    /**
+     * 单次请求的尝试上限。
+     * 实测依据：ModelScope 在手机网络下会 `HTTP/2 stream 1 reset by server (INTERNAL_ERROR)`，
+     * 本次就实际发生在只下了 1MB 的时候 —— 这类中断是常态，不是异常情况。
+     */
+    private const val MAX_DOWNLOAD_ATTEMPTS = 6
+
+    /**
+     * 下载指定量化档，支持断点续传（HTTP Range）与**自动重试**。
+     *
+     * 为什么必须自动重试：v1.17.0 实测中 ModelScope 的 HTTP/2 流在 1MB 处被服务端重置，
+     * 而手机网络（切基站、锁屏、后台限速）让这类中断成为常态。把"再点一次"的负担
+     * 丢给用户，等于让一个 5 分钟的下载需要人守着。
+     *
+     * 每次重试都从**磁盘上的实际字节数**续传（而不是内存里的计数），因为失败可能
+     * 发生在数据已经落盘之后；连续两次"一字节没长"就放弃，避免服务端总在同一处
+     * 断开时把重试次数白耗光。
+     */
     suspend fun download(
         quant: HyMtQuant,
         source: HyMtSource,
@@ -159,49 +184,27 @@ object HyMtModelStore {
         mutex.withLock {
             runCatching {
                 val part = partFileFor(quant)
-                var done = if (part.exists()) part.length() else 0L
                 // 已超过期望大小（换过源 / 上次写坏）→ 从头来
-                if (done > quant.sizeBytes) {
-                    part.delete()
-                    done = 0L
-                }
+                if (part.exists() && part.length() > quant.sizeBytes) part.delete()
 
-                val req = Request.Builder()
-                    .url(source.urlFor(quant))
-                    .apply { if (done > 0) header("Range", "bytes=$done-") }
-                    .build()
-
-                HttpClients.download.newCall(req).execute().use { resp ->
-                    if (!resp.isSuccessful) {
-                        throw RuntimeException("HTTP ${resp.code}（${source.displayName}）")
+                var attempt = 0
+                while (true) {
+                    val before = if (part.exists()) part.length() else 0L
+                    try {
+                        attempt++
+                        fetchOnce(part, quant, source, progress)
+                        break
+                    } catch (ce: CancellationException) {
+                        throw ce
+                    } catch (t: Throwable) {
+                        val now = if (part.exists()) part.length() else 0L
+                        // "一字节没长"要连续 3 次才判定为卡死：手机上一次十几秒的
+                        // 网络中断很常见，若 2 次就放弃，等于出门右转丢给用户重来。
+                        val stalled = attempt >= 3 && now <= before
+                        if (!isRetryable(t) || attempt >= MAX_DOWNLOAD_ATTEMPTS || stalled) throw t
+                        // 退避 2s, 4s, 6s, 8s, 10s（合计约 30s 重试窗口后放弃）
+                        delay(2000L * attempt)
                     }
-                    // 服务端不支持 Range 却回了 200 → 必须截断重写，
-                    // 否则会在旧字节后面接着写，得到一个大小对但内容坏的文件。
-                    val append = done > 0 && resp.code == 206
-                    if (!append) done = 0L
-
-                    val body = resp.body ?: throw RuntimeException("空响应体")
-                    body.byteStream().use { input ->
-                        java.io.FileOutputStream(part, append).use { out ->
-                            val buf = ByteArray(64 * 1024)
-                            var lastReport = 0L
-                            while (true) {
-                                val n = input.read(buf)
-                                if (n <= 0) break
-                                out.write(buf, 0, n)
-                                done += n
-                                // 每 2MB 报一次：太频繁会把 UI 刷爆
-                                if (done - lastReport >= 2L * 1024 * 1024) {
-                                    lastReport = done
-                                    progress?.onProgress(
-                                        HyMtProgress.Phase.DOWNLOADING, done, quant.sizeBytes
-                                    )
-                                }
-                            }
-                            out.flush()
-                        }
-                    }
-                    progress?.onProgress(HyMtProgress.Phase.DOWNLOADING, done, quant.sizeBytes)
                 }
 
                 // 大小校验（快）→ sha256 校验（慢，但能挡住"下到一半的坏文件被当模型加载"）
@@ -223,6 +226,65 @@ object HyMtModelStore {
                 dst
             }
         }
+    }
+
+    /** 单次尝试：按 part 当前长度续传，读完 flush 即返回（失败由外层决定是否重试） */
+    private fun fetchOnce(
+        part: File,
+        quant: HyMtQuant,
+        source: HyMtSource,
+        progress: HyMtProgress?,
+    ) {
+        var done = if (part.exists()) part.length() else 0L
+        if (done > quant.sizeBytes) {
+            part.delete()
+            done = 0L
+        }
+
+        val req = Request.Builder()
+            .url(source.urlFor(quant))
+            .apply { if (done > 0) header("Range", "bytes=$done-") }
+            .build()
+
+        HttpClients.download.newCall(req).execute().use { resp ->
+            if (!resp.isSuccessful) {
+                throw HttpStatusException(resp.code, "HTTP ${resp.code}（${source.displayName}）")
+            }
+            // 服务端不支持 Range 却回了 200 → 必须截断重写，
+            // 否则会在旧字节后面接着写，得到一个大小对但内容坏的文件。
+            val append = done > 0 && resp.code == 206
+            if (!append) done = 0L
+
+            val body = resp.body ?: throw RuntimeException("空响应体")
+            body.byteStream().use { input ->
+                java.io.FileOutputStream(part, append).use { out ->
+                    val buf = ByteArray(64 * 1024)
+                    var lastReport = done
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n <= 0) break
+                        out.write(buf, 0, n)
+                        done += n
+                        // 每 2MB 报一次：太频繁会把 UI 刷爆
+                        if (done - lastReport >= 2L * 1024 * 1024) {
+                            lastReport = done
+                            progress?.onProgress(
+                                HyMtProgress.Phase.DOWNLOADING, done, quant.sizeBytes
+                            )
+                        }
+                    }
+                    out.flush()
+                }
+            }
+            progress?.onProgress(HyMtProgress.Phase.DOWNLOADING, done, quant.sizeBytes)
+        }
+    }
+
+    /** 网络类错误与 5xx/408/429 值得重试；其余（4xx、空响应体等）不重试 */
+    private fun isRetryable(t: Throwable): Boolean = when (t) {
+        is java.io.IOException -> true      // 连接被重置 / 超时 / 断流都属这类
+        is HttpStatusException -> t.code == 408 || t.code == 429 || t.code in 500..599
+        else -> false
     }
 
     /**

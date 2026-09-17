@@ -62,6 +62,12 @@ object HttpClients {
             // readTimeout 是"两次读之间"的上限（不是总时长）：卡死 30 秒没数据才算断
             .readTimeout(30, TimeUnit.SECONDS)
             .callTimeout(0, TimeUnit.MILLISECONDS)
+            // v1.17.0 实测：ModelScope 的 HTTP/2 流会在下载途中被服务端重置
+            //（`HTTP/2 stream 1 reset by server (INTERNAL_ERROR)`，本次发生在只下了 1MB 时），
+            // 而同一个 URL 走 HTTP/1.1 就能稳定续传（实测 4.7~7MB/s）。
+            // 模型下载是单条串行流，用不上 HTTP/2 的多路复用，所以直接固定到 1.1。
+            // （即便被重置也有 HyMtModelStore 的自动重试+续传兜底。）
+            .protocols(listOf(okhttp3.Protocol.HTTP_1_1))
             .build()
     }
 }
