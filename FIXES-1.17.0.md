@@ -132,7 +132,22 @@
 
 另外设置页提供「预加载 / 卸载」两个按钮：把几秒的加载耗时挪到用户主动点击时。
 
-### 3.4 图片翻译会自动降级，不需要改那些调用点
+### 3.4 取消必须传进 native，否则会堵死整个引擎
+
+本 App 的读屏/实时链路在"屏幕又变了"时会 `cancel()` 上一个 job
+（`ScreenReaderService.fullscreenJob?.cancel()`、`LiveTranslateService.loopJob?.cancel()`）。
+但 native 解码循环不知道 Kotlin 协程被取消了，会**继续算到 maxTokens 才停** ——
+按 16 tok/s、上限 1024 token 算就是一分多钟，而这期间推理 mutex 一直被占，
+后面所有翻译请求全排在后面。用户看到的现象是"本地引擎卡死"。
+
+改法：在 `generate` 里挂 `coroutineContext[Job].invokeOnCompletion`，
+一旦因取消而结束就调 `model.cancelGeneration()` 让 native 立刻收尾。
+
+同理，**模型加载**（1.13GB，1~2 秒）用 `withContext(NonCancellable)` 包住：
+调用方（Activity/Service）在加载途中被销毁时，不能让 native 侧留下半初始化的
+context 而 mutex 已经释放 —— 保证"要么完整加载，要么完整不加载"。
+
+### 3.5 图片翻译会自动降级，不需要改那些调用点
 
 Hy-MT2 是**纯文本**模型（`visionCapable = false`）。工程里原本就有按
 `visionCapable` 分支的逻辑：
@@ -142,7 +157,7 @@ Hy-MT2 是**纯文本**模型（`visionCapable = false`）。工程里原本就�
 
 所以实时屏幕翻译、拍照翻译都能用本地引擎，**只有"把整张图交给模型"那条路用不了**。
 
-### 3.5 兼容性处理
+### 3.6 兼容性处理
 
 | 问题 | 处理 |
 |---|---|
@@ -151,7 +166,7 @@ Hy-MT2 是**纯文本**模型（`visionCapable = false`）。工程里原本就�
 | **自编 .so 用 armv8.6-a，老 CPU 上会 SIGILL（崩进程，捕获不到）** | `HyMtDeviceSupport` 读 `/proc/cpuinfo` 预检 `asimddp`/`i8mm`/`asimdhp`，不支持则整页禁用并说明原因 |
 | ABI：.so 只有 arm64-v8a | 同上守卫的一部分：非 arm64 设备直接禁用该引擎 |
 
-### 3.6 自编 native 运行时的必要性
+### 3.7 自编 native 运行时的必要性
 
 `app/src/main/jniLibs/arm64-v8a/libllama-android.so` 由本工程自己编译：
 

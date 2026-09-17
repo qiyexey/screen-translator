@@ -9,11 +9,14 @@ import com.hunter.screentranslator.util.HyMtQuant
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
+import kotlin.coroutines.coroutineContext
 import org.codeshipping.llamakotlin.LlamaModel
 import java.io.File
 
@@ -164,7 +167,19 @@ object HyMtRuntime {
                 this.maxTokens = maxNewTokens
                 seed = -1
             }
-            cleanOutput(m.generate(buildPrompt(m, prompt), cfg))
+            // 调用方被取消时（本 App 的读屏/实时链路在"屏幕又变了"时就会
+            // cancel 上一个 job），必须把取消传进 native 解码循环。
+            // 否则这一句会继续算到 maxTokens 才停 —— 16 tok/s 下 1024 token 是
+            // 一分多钟，而这期间 mutex 一直被占，后面所有翻译请求全被堵死，
+            // 用户看到的是"本地引擎卡死"。
+            val cancelHook = coroutineContext[Job]?.invokeOnCompletion { cause ->
+                if (cause != null) runCatching { m.cancelGeneration() }
+            }
+            try {
+                cleanOutput(m.generate(buildPrompt(m, prompt), cfg))
+            } finally {
+                cancelHook?.dispose()
+            }
         }
     }
 
@@ -213,20 +228,25 @@ object HyMtRuntime {
 
         // 换档/换参：先彻底关掉旧的，再开新的（两份同时存在会 OOM）
         closeLocked()
-        val loaded = LlamaModel.load(file.absolutePath) {
-            contextSize = ctx
-            batchSize = 256
-            this.threads = nThreads
-            threadsBatch = nThreads
-            temperature = 0.7f
-            topP = 0.6f
-            topK = 20
-            repeatPenalty = 1.05f
-            maxTokens = 512
-            useMmap = true     // 1.13GB 权重靠 mmap 按需换页，比一次性读进堆稳
-            useMlock = false   // 锁内存会让系统无法回收，低内存时反而更容易被杀
-            gpuLayers = 0      // 预编译库只有 CPU 后端
-            seed = -1
+        // 加载 1.13GB 要 1~2 秒，这期间调用方（Activity/Service）可能被销毁而取消协程。
+        // 若在加载途中被取消，native 侧可能留下半初始化的 context，而 mutex 已经释放 ——
+        // 用 NonCancellable 包住，保证"要么完整加载，要么完整不加载"。
+        val loaded = withContext(NonCancellable) {
+            LlamaModel.load(file.absolutePath) {
+                contextSize = ctx
+                batchSize = 256
+                this.threads = nThreads
+                threadsBatch = nThreads
+                temperature = 0.7f
+                topP = 0.6f
+                topK = 20
+                repeatPenalty = 1.05f
+                maxTokens = 512
+                useMmap = true     // 1.13GB 权重靠 mmap 按需换页，比一次性读进堆稳
+                useMlock = false   // 锁内存会让系统无法回收，低内存时反而更容易被杀
+                gpuLayers = 0      // 预编译库只有 CPU 后端
+                seed = -1
+            }
         }
         model = loaded
         loadedKey = key
