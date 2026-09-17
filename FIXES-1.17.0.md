@@ -78,9 +78,29 @@
 1. **目标语言要用全称**（"中文"/"英语"/"日语"），传 `zh`/`en` 会明显掉质量。
    App 的 `LANG_DISPLAY` 是界面用的（"English"/"日本語"），所以本地引擎另建了
    `HYMT_TARGET_NAMES` 映射，没有复用。
-2. **要套 GGUF 自带的对话模板**，不能手拼 `<｜hy_User｜>` 这类特殊 token ——
-   一个字符不对，模型就从"翻译"退化成"续写"。走 llama.cpp 的
-   `llama_chat_apply_template` 最稳。
+2. **要套对话模板**，但这里有个坑：llama.cpp **核心库**的
+   `llama_chat_apply_template` 只有**老式启发式解析器**（只认识 chatml / llama2 /
+   gemma 等固定几种），Hy-MT2 的 jinja 模板不在其中 → 走 fallback 分支，
+   **把 `<｜hy_User｜>` 放到了正文之后**。实测字节：
+
+   ```
+   官方格式（llama-server 的 jinja 路径）: BOS + <｜hy_User｜> + 正文 + <｜hy_Assistant｜>
+   wrapper 走核心库 API 的实际产出        : BOS + 正文 + <｜hy_User｜>
+   ```
+
+   jinja 引擎只在 `common/` 层（llama-cli / llama-server 用的那层），核心库没有。
+   所以本工程**手工拼官方格式**，并在加载后校验模型模板里确实含这两个标记，
+   不含就退回 `applyChatTemplate`（换模型/导入别的 gguf 时不硬闯）。
+
+   证据（同一模型、同一采样参数、12 句对比）：13 句里 10 句输出完全相同，
+   3 句是同义改写，而**手工格式那 3 句每次都跟 llama-server（jinja 参考实现）一致**：
+   `Hello, how are you?` → 官方格式 `嗨，你好吗？`（老解析器是 `你好，你怎么样？`）、
+   `Press and hold…` → `长按以录制语音消息`、`本商品は返品できません。` → `此商品不可退货。`
+
+   分词侧验证：手工格式下 `<｜hy_User｜>` → 单个 token id **120006**、
+   `<｜hy_Assistant｜>` → **120007**；`generate()` 内部是 `parse_special=true`，
+   所以特殊 token 会被正确识别为独立 token 而不是被拆成普通文本。
+   另外确认 `add_special=true` 不会重复加 BOS（文本已以 BOS 开头时只出现 1 次）。
 
 采样参数用官方给的 1.8B 推荐值：`temperature 0.7 / top_p 0.6 / top_k 20 / repeat_penalty 1.05`。
 
@@ -93,6 +113,10 @@
   备选 HuggingFace（本机实测 **0.34 MB/s**，约 55 分钟）。同一份文件，速度差 12 倍。
 - **断点续传**：`.part` 文件 + HTTP Range。1.13GB 在手机网络上是"大概率会中断"的量级。
 - **完整性**：先校验字节数，再校验 sha256（官方 LFS 记录值，逐字节）。
+- **JSON 转义自己写**：那层 wrapper 是**手写 JSON 解析器**，只认识
+  `\"` / `\n` / `\t` / `\\` 四种转义，其它按"去掉反斜杠的字面量"处理。
+  而 Android 的 `JSONObject.quote` 会对 0x7F~0x9F、U+2028/2029 等输出 `\uXXXX`，
+  被还原成字面量 `uXXXX` —— 屏幕文本里的"…"很容易踩到。所以自己转义，只产出它认识的那几种。
 - **导入自备模型**：SAF 选 gguf，**不校验 sha256**（这正是导入存在的意义 ——
   用户可能有自己量化/微调的模型），只提示大小与官方不一致。
 - **下载挂在 App 级作用域**，不是 Activity 的 lifecycleScope：
@@ -156,7 +180,25 @@ Hy-MT2 是**纯文本**模型（`visionCapable = false`）。工程里原本就�
 | 未定义的 wrapper 符号 | 0 | 0 |
 | LOAD 段对齐 | 0x1000 | **0x4000（16KB 页友好）** |
 
-## 4. 已知限制
+## 4. 独立验收（不依赖装机）
+
+由于本机没有设备控制授权（无法自行安装 APK），另外做了一层**不依赖装机**的验收：
+用**与 APK 内完全相同的 wrapper 源码 + 同一批静态库**编了一个 native 验收程序
+（`jni/` 里的源码，链接同一份 `libllama.a`），直接跑真实模型：
+
+| 验收项 | 结果 |
+|---|---|
+| 模型加载（`hunyuan-dense`） | ✅ 通过 |
+| 官方格式 prompt 分词 | ✅ `<｜hy_User｜>`→120006、`<｜hy_Assistant｜>`→120007 各为单个 token |
+| BOS 是否重复 | ✅ 只 1 次 |
+| 13 句真实屏幕文本 → 中文 | ✅ 全部正确，3 句与 llama-server 参考输出逐字一致 |
+| 单句耗时（干净状态） | ✅ ≈0.83~1.03 s（与 llama-server 的 1.00s 一致） |
+
+> 注：后一轮 A/B 对比跑在**热机状态**（前面连续编译 + 跑模型），出现 2~7s 的
+> 异常值，那是热降频/调度抖动，不作为速度结论 —— 速度结论取 llama-bench 冷却后
+> 与 llama-server 独立会话的数据（§2.1/§2.2）。
+
+## 5. 已知限制
 
 1. **速度**：1.00 s/句（短句）。它不是"更快"，是"离线可用"。
    实时屏幕翻译每次画面变化都翻，用本地模型会比云端慢，也更耗电。
@@ -166,7 +208,7 @@ Hy-MT2 是**纯文本**模型（`visionCapable = false`）。工程里原本就�
    （`GGML_CPU_ALL_VARIANTS`），可作为后续优化。
 5. **图片翻译用不了**（纯文本模型），会走 OCR 链路。
 
-## 5. 验收清单
+## 6. 验收清单
 
 - [x] 设备内编译 llama.cpp CLI，确认支持 `hunyuan-dense`
 - [x] 模型下载 + sha256 校验

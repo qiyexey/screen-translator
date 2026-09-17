@@ -15,7 +15,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.codeshipping.llamakotlin.LlamaModel
-import org.json.JSONObject
 import java.io.File
 
 /**
@@ -125,6 +124,15 @@ object HyMtRuntime {
     private val mutex = Mutex()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
+    /** 全角竖线 U+FF5C 与 U+2581：Hy-MT2 特殊 token 的组成部分 */
+    private const val BAR = "\uFF5C"
+    private const val UNDER = "\u2581"
+
+    /** Hy-MT2 官方对话格式的三个标记（字节级与 GGUF 模板里的字面量一致） */
+    private val HYMT_BOS = "<${BAR}hy_begin${UNDER}of${UNDER}sentence$BAR>"
+    private val HYMT_USER = "<${BAR}hy_User$BAR>"
+    private val HYMT_ASSISTANT = "<${BAR}hy_Assistant$BAR>"
+
     private var model: LlamaModel? = null
     private var loadedKey: String? = null
     private var lastUsedAt = 0L
@@ -156,11 +164,7 @@ object HyMtRuntime {
                 this.maxTokens = maxNewTokens
                 seed = -1
             }
-            // 用 GGUF 自带的对话模板包 prompt —— 手拼 <｜hy_User｜> 这类特殊 token
-            // 只要有一个字符不对，模型就会退化成"续写"而不是"翻译"。
-            val messagesJson = """[{"role":"user","content":${JSONObject.quote(prompt)}}]"""
-            val templated = m.applyChatTemplate(messagesJson, true)
-            cleanOutput(m.generate(templated, cfg))
+            cleanOutput(m.generate(buildPrompt(m, prompt), cfg))
         }
     }
 
@@ -227,6 +231,58 @@ object HyMtRuntime {
         model = loaded
         loadedKey = key
         return loaded
+    }
+
+    /**
+     * 构造送进模型的 prompt。
+     *
+     * **优先手工拼官方格式**，而不是走 `applyChatTemplate`。原因是实测发现的：
+     * llama.cpp 核心里的 `llama_chat_apply_template` 只有**老式启发式解析器**
+     * （只认识 chatml / llama2 / gemma 等固定几种模板），Hy-MT2 的 jinja 模板
+     * 不在其中，会走到 fallback 分支，**把 `<｜hy_User｜>` 放到了正文之后**
+     * （实测字节：`BOS + 正文 + <｜hy_User｜>`，而官方格式是 `BOS + <｜hy_User｜> + 正文`）。
+     * jinja 引擎只在 common 层（llama-cli / llama-server 用的那层），核心库没有。
+     *
+     * 手工拼的收益（实测 12 句对比）：13 句里 10 句输出相同，3 句是同义改写，
+     * 而**手工格式那 3 句每次都跟 llama-server（jinja 参考实现）的输出一致**。
+     * 分词侧也验证过：`<｜hy_User｜>` → 单个 token id 120006、
+     * `<｜hy_Assistant｜>` → 120007（用官方格式时它们是独立 token，
+     * `generate()` 内部是 `parse_special=true`，所以能被正确识别）。
+     *
+     * 但**不硬闯**：若模型自带的模板里没有这两个标记（换模型、或用户导入了别的 gguf），
+     * 就退回 `applyChatTemplate` —— 让 llama.cpp 自己处理，总比瞎拼强。
+     */
+    private fun buildPrompt(m: LlamaModel, userText: String): String {
+        val tpl = runCatching { m.getChatTemplate() }.getOrDefault("")
+        return if (tpl.contains(HYMT_USER) && tpl.contains(HYMT_ASSISTANT)) {
+            HYMT_BOS + HYMT_USER + userText + HYMT_ASSISTANT
+        } else {
+            m.applyChatTemplate(
+                """[{"role":"user","content":${jsonEscape(userText)}}]""",
+                true
+            )
+        }
+    }
+
+    /**
+     * 自己转义，不用 `org.json.JSONObject.quote`。
+     *
+     * 因为 llama.cpp 那个 wrapper 里是**手写 JSON 解析器**，只认识
+     * `\"` / `\n` / `\t` / `\\` 四种转义，其它一律当成"去掉反斜杠的字面量" ——
+     * 而 Android 的 JSONObject.quote 会对 0x7F~0x9F、U+2028/2029 等字符输出
+     * `\uXXXX`，被那个解析器还原成字面量 `uXXXX`，译文输入就被污染了
+     * （屏幕文本里的"…"（U+2026）、引号等很容易踩到）。这里只产出它认识的转义。
+     */
+    private fun jsonEscape(s: String): String = buildString {
+        for (ch in s) {
+            when (ch) {
+                '"' -> append("\\\"")
+                '\\' -> append("\\\\")
+                '\n', '\r' -> append("\\n")   // 解析器不认 \r，统一成 \n
+                '\t' -> append("\\t")
+                else -> if (ch.code >= 0x20) append(ch)  // 其余控制字符直接丢掉
+            }
+        }
     }
 
     private fun closeLocked() {
