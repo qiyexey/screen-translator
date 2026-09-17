@@ -747,6 +747,16 @@
                     </LinearLayout>
 
                     <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnHyMtBench"
+                        style="@style/Widget.ScreenTranslator.Button.Outlined"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="跑一次基准（5 句，结果写进诊断信息）"
+                        android:textColor="@color/accent"
+                        android:textSize="12sp" />
+
+                    <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnHyMtCopyDiag"
                         style="@style/Widget.ScreenTranslator.Button.Outlined"
                         android:layout_width="match_parent"

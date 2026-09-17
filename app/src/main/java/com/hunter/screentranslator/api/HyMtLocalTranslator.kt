@@ -275,6 +275,12 @@ object HyMtRuntime {
     @Volatile var lastChars: Int = 0
         private set
 
+    /**
+     * 最近一次 5 句基准的结果摘要（由设置页写入）。
+     * 放这里是为了让它自动进入"诊断信息"——用户粘一段就能把真机性能数据带出来。
+     */
+    @Volatile var lastBenchSummary: String? = null
+
     /** 实测延迟摘要；还没翻译过则返回 null */
     fun lastLatencySummary(): String? {
         val ms = lastLatencyMs

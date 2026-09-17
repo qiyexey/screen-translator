@@ -179,6 +179,7 @@ class EngineSettingsActivity : BaseActivity() {
             }
         }
         b.btnHyMtDelete.setOnClickListener { confirmDeleteHyMt() }
+        b.btnHyMtBench.setOnClickListener { runHyMtBench() }
         b.btnHyMtCopyDiag.setOnClickListener {
             val text = buildHyMtDiagnostics()
             val cm = getSystemService(android.content.ClipboardManager::class.java)
@@ -227,7 +228,73 @@ class EngineSettingsActivity : BaseActivity() {
             append("运行时：").append(HyMtRuntime.statusLine()).append('\n')
             HyMtRuntime.rssMb()?.let { append("进程内存：RSS ").append(it).append(" MB\n") }
             HyMtRuntime.lastLatencySummary()?.let { append(it).append('\n') }
+            HyMtRuntime.lastBenchSummary?.let { append(it).append('\n') }
             append("模型目录占用：").append(fmtBytes(HyMtModelStore.usedBytes()))
+        }
+    }
+
+    /**
+     * 5 句基准。
+     *
+     * 为什么要有这个按钮：开发机没有设备控制权限时，App 装没装、跑多快、发热如何
+     * 都只能靠用户口述；而"一句两句话的体感"没有可比性。跑一组固定句子、
+     * 把每句毫秒数写进诊断信息，用户粘一段就等价于替我做了一次基准测试。
+     *
+     * 注意首句包含模型加载（冷启动几秒），所以单独标出来、且不计入平均。
+     */
+    private fun runHyMtBench() {
+        val samples = listOf(
+            "Hello, how are you?",
+            "Battery low. Please connect the charger.",
+            "Are you sure you want to delete this file?",
+            "昨日の会議は中止になりました。",
+            "설정에서 알림을 끌 수 있습니다.",
+        )
+        b.btnHyMtBench.isEnabled = false
+        lifecycleScope.launch {
+            val outs = ArrayList<String>()
+            val times = ArrayList<Long>()
+            val translator = TranslatorFactory.current()
+            samples.forEachIndexed { i, src ->
+                b.btnHyMtBench.text = "基准中 ${i + 1}/${samples.size}…"
+                val t0 = android.os.SystemClock.elapsedRealtime()
+                val r = translator.translate(src, App.prefs.targetLang)
+                val dt = android.os.SystemClock.elapsedRealtime() - t0
+                val out = r.getOrNull()
+                if (out != null) {
+                    times.add(dt)
+                    outs.add("• ${dt} ms${
+                        if (i == 0) "（首句，含模型加载）" else ""
+                    }｜$src → $out")
+                } else {
+                    outs.add("• 失败｜$src → ${r.exceptionOrNull()?.message}")
+                }
+            }
+            b.btnHyMtBench.isEnabled = true
+            b.btnHyMtBench.text = "跑一次基准（5 句，结果写进诊断信息）"
+
+            val warm = times.drop(1)
+            val avg = if (warm.isNotEmpty()) warm.sum() / warm.size else 0
+            val summary = buildString {
+                append("5 句基准：")
+                if (times.isNotEmpty()) {
+                    append("首句 ").append(times.first()).append(" ms")
+                    if (warm.isNotEmpty()) {
+                        append("，其余平均 ").append(avg).append(" ms")
+                        append("（最快 ").append(warm.min()).append(" / 最慢 ").append(warm.max()).append("）")
+                    }
+                } else {
+                    append("全部失败")
+                }
+            }
+            HyMtRuntime.lastBenchSummary = summary
+            refreshHyMtUi()
+            AlertDialog.Builder(this@EngineSettingsActivity)
+                .setTitle("📊 本地引擎基准")
+                .setMessage(summary + "\n\n" + outs.joinToString("\n") +
+                        "\n\n（结果已写入「复制诊断信息」）")
+                .setPositiveButton("好的", null)
+                .show()
         }
     }
 
