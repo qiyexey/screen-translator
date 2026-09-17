@@ -46,13 +46,100 @@ private val HYMT_TARGET_NAMES = mapOf(
     "ru" to "俄语",
 )
 
+/**
+ * 单次请求的输入上限（字符）。实测依据：
+ * 1259 字仍能正确翻译（22.9s），3779 字就退化成"续写英文"且耗时 89.5s ——
+ * 取两者之间再留余量，配合按行分块即可覆盖长文本。
+ */
+private const val MAX_CHARS_PER_REQUEST = 700
+
+/**
+ * 总量上限。超过就**明确报错**而不是硬跑：本机 CPU 上 3779 字要 89 秒、
+ * 7559 字要 126 秒，界面只有一句"正在翻译…"，用户只会以为卡死。
+ */
+private const val MAX_TOTAL_CHARS = 3000
+
 class HyMtLocalTranslator(private val quant: HyMtQuant) : Translator {
 
     override suspend fun translate(text: String, targetLang: String): Result<String> {
         if (text.isBlank()) return Result.success("")
         val targetName = HYMT_TARGET_NAMES[targetLang] ?: targetLang
-        val prompt = buildHyMtPrompt(text, targetName)
-        return HyMtRuntime.generate(prompt, maxTokensFor(text))
+
+        if (text.length > MAX_TOTAL_CHARS) {
+            // 不静默产垃圾：本机 CPU 上这个量级要等好几分钟，界面只有"正在翻译…"，
+            // 用户会以为卡死。明确拒绝并给出可执行的下一步。
+            return Result.failure(
+                IllegalStateException(
+                    "本地引擎一次最多约 $MAX_TOTAL_CHARS 字（这次 ${text.length} 字）。" +
+                        "本机 CPU 上更长的文本要等几分钟，建议分段翻译，" +
+                        "或在设置里临时切到云端引擎（如智谱 glm-4-flash 免费档）。"
+                )
+            )
+        }
+
+        val chunks = chunkByLines(text, MAX_CHARS_PER_REQUEST)
+        if (chunks.size == 1) {
+            return HyMtRuntime.generate(buildHyMtPrompt(text, targetName), maxTokensFor(text))
+        }
+
+        // 长文本按行分块顺序翻译再拼回。
+        // 为什么必须分块（实测，见 FIXES-1.17.0.md §5）：
+        //   314 字 → 4.4s 正常；1259 字 → 22.9s 正常；
+        //   3779 字 → 89.5s 且**输出是英文续写**（超出 2048 上下文被截断后模型改成了续写）。
+        // 分块不会让总耗时变多（耗时与总字数近似成正比），但*避免*了这种退化和
+        // 输出被 1024 token 上限截断。
+        val sb = StringBuilder()
+        chunks.forEachIndexed { i, chunk ->
+            val r = HyMtRuntime.generate(buildHyMtPrompt(chunk, targetName), maxTokensFor(chunk))
+            val out = r.getOrNull()
+            if (out == null) {
+                // 第一段就失败 → 整体失败（原因透传）；后续段落失败 → 保住已翻出的部分，
+                // 总比整段丢掉强。
+                if (sb.isEmpty()) return r
+                return Result.success(sb.toString())
+            }
+            if (sb.isNotEmpty()) sb.append('\n')
+            sb.append(out)
+        }
+        return Result.success(sb.toString())
+    }
+
+    /**
+     * 按行切块，尽量不切断句子。
+     * 单行本身就超限（罕见，例如一整个没换行的长段落）时才硬切。
+     */
+    private fun chunkByLines(text: String, maxChars: Int): List<String> {
+        if (text.length <= maxChars) return listOf(text)
+        val out = ArrayList<String>()
+        val cur = StringBuilder()
+        fun flush() {
+            if (cur.isNotEmpty()) {
+                out.add(cur.toString())
+                cur.clear()
+            }
+        }
+        for (line in text.split('\n')) {
+            if (line.length > maxChars) {
+                flush()
+                // 平衡切分：定长硬切会让末尾剩一个极小的碎块
+                // （实测 701 字会切成 700 + 1，等于多发一次只翻一个字的请求），
+                // 所以按"需要几块"反算每块大小 —— 每块仍 ≤ maxChars。
+                val pieces = (line.length + maxChars - 1) / maxChars
+                val size = (line.length + pieces - 1) / pieces
+                var i = 0
+                while (i < line.length) {
+                    val end = minOf(i + size, line.length)
+                    out.add(line.substring(i, end))
+                    i = end
+                }
+                continue
+            }
+            if (cur.length + line.length + 1 > maxChars) flush()
+            if (cur.isNotEmpty()) cur.append('\n')
+            cur.append(line)
+        }
+        flush()
+        return out
     }
 
     /**
