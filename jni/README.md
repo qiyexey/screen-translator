@@ -72,3 +72,26 @@ readelf -l libllama-android.so | grep LOAD                                # 对�
 `-march=armv8.6-a` 意味着**在不支持 dotprod/i8mm/fp16 的 CPU 上执行会 SIGILL**，
 且**捕获不到**（不是异常，是进程直接死）。所以 App 里加了
 `HyMtDeviceSupport`：加载前读 `/proc/cpuinfo` 预检，不支持就**整页禁用**并说明原因。
+
+## 独立验收程序（不依赖装机）
+
+`harness.cpp` 用**与 App 内完全相同的 wrapper 源码 + 同一批静态库**直接跑真实模型，
+用来在没有设备控制授权（装不了 APK）时也能验收 native 路径：
+
+```bash
+JC=~/work/llama.cpp/build-android
+clang++ -O3 -std=c++17 -march=armv8.6-a \
+  -DLLAMA_AVAILABLE=1 -DLIBRARY_VERSION='"0.1.7"' \
+  -DGGML_USE_DOTPROD -DGGML_USE_FP16_VECTOR_ARITHMETIC -DGGML_USE_MATMUL_INT8 \
+  -I . -I ~/work/llama.cpp/include -I ~/work/llama.cpp/ggml/include \
+  -o harness harness.cpp llama_context_wrapper.cpp \
+  $JC/src/libllama.a $JC/ggml/src/libggml.a $JC/ggml/src/libggml-base.a $JC/ggml/src/libggml-cpu.a \
+  -llog -lm -ldl -Wl,--exclude-libs,ALL
+./harness ~/models/Hy-MT2-1.8B-Q4_K_M.gguf
+```
+
+它检查四件事：模型能否加载、`<｜hy_User｜>`/`<｜hy_Assistant｜>` 是否为单个 token、
+BOS 是否重复、以及 13 句真实屏幕文本的译法与耗时。
+
+> 注意：**不要**加 `-landroid`。在 Termux 里它会把 `/system/lib64/libunwindstack.so`
+> 拉进依赖而启动失败（App 内有自己的 linker namespace，不受影响）。
