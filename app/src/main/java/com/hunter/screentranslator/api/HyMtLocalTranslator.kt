@@ -86,12 +86,9 @@ class HyMtLocalTranslator(private val quant: HyMtQuant) : Translator {
  */
 object HyMtDeviceSupport {
 
-    /** null = 支持；非 null = 不支持的原因（可直接展示给用户） */
-    val reasonIfUnsupported: String? by lazy {
-        if (Build.SUPPORTED_ABIS.none { it == "arm64-v8a" }) {
-            return@lazy "本机不是 arm64 设备：本地模型运行时只提供 arm64-v8a 版本"
-        }
-        val feats = runCatching {
+    /** /proc/cpuinfo 的 Features 集合（读不到就是空集） */
+    private val features: Set<String> by lazy {
+        runCatching {
             File("/proc/cpuinfo").readLines()
                 .firstOrNull { it.startsWith("Features") }
                 ?.substringAfter(':')
@@ -100,6 +97,31 @@ object HyMtDeviceSupport {
                 ?.toSet()
                 .orEmpty()
         }.getOrDefault(emptySet())
+    }
+
+    /**
+     * 给设置页"诊断信息"用的设备摘要。
+     *
+     * 为什么要把指令集也打出来：这正是本引擎唯一的硬性设备要求
+     * （自编 .so 用 armv8.6-a）。用户在别的机器上装了用不了时，
+     * 这一行就能直接说明原因，不用来回猜。
+     */
+    val summary: String by lazy {
+        val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: "?"
+        val cores = Runtime.getRuntime().availableProcessors()
+        val marks = listOf(
+            "asimddp" to "dotprod", "i8mm" to "i8mm",
+            "asimdhp" to "fp16", "sve2" to "sve2",
+        ).joinToString(" ") { (k, name) -> if (k in features) "$name✓" else "$name✗" }
+        "$abi · $cores 核 · $marks"
+    }
+
+    /** null = 支持；非 null = 不支持的原因（可直接展示给用户） */
+    val reasonIfUnsupported: String? by lazy {
+        if (Build.SUPPORTED_ABIS.none { it == "arm64-v8a" }) {
+            return@lazy "本机不是 arm64 设备：本地模型运行时只提供 arm64-v8a 版本"
+        }
+        val feats = features
 
         if (feats.isEmpty()) {
             // 读不到就拒绝：万一 CPU 不支持，代价是进程崩溃，比"用不了本地模型"严重得多
@@ -172,6 +194,13 @@ object HyMtRuntime {
         if (ms <= 0) return null
         return "上次翻译：${ms} ms（${lastLines} 行 / ${lastChars} 字）"
     }
+
+    /** 诊断用：进程常驻内存（MB）。模型是按需换页的，这个数会随翻译过程上涨 */
+    fun rssMb(): Int? = runCatching {
+        File("/proc/self/status").readLines()
+            .firstOrNull { it.startsWith("VmRSS:") }
+            ?.filter { it.isDigit() }?.toInt()?.div(1024)
+    }.getOrNull()
 
     /** 供设置页显示"模型已加载/未加载" */
     fun statusLine(): String {

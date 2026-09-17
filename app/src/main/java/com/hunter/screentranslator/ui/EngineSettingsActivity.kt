@@ -179,6 +179,12 @@ class EngineSettingsActivity : BaseActivity() {
             }
         }
         b.btnHyMtDelete.setOnClickListener { confirmDeleteHyMt() }
+        b.btnHyMtCopyDiag.setOnClickListener {
+            val text = buildHyMtDiagnostics()
+            val cm = getSystemService(android.content.ClipboardManager::class.java)
+            cm?.setPrimaryClip(android.content.ClipData.newPlainText("屏幕翻译诊断", text))
+            toast("诊断信息已复制，可直接发给开发者")
+        }
 
         // 下载在 App 级作用域里跑（退出本页不中断），所以这里的进度条要
         // 靠轮询文件状态来跟上 —— 重新进页面时也能自动接上。
@@ -194,6 +200,35 @@ class EngineSettingsActivity : BaseActivity() {
     private fun simpleListener(onSelected: (Int) -> Unit) = object : AdapterView.OnItemSelectedListener {
         override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) = onSelected(pos)
         override fun onNothingSelected(p: AdapterView<*>?) {}
+    }
+
+    /**
+     * 诊断信息。
+     *
+     * 存在的理由很具体：本机没有设备控制授权时，开发者**装不了也点不了**这个 App，
+     * 排查只能靠用户口述。把"守卫依据的指令集 / 线程与上下文 / 进程内存 / 上次延迟 /
+     * 模型文件状态"一次打全并允许一键复制，用户粘贴一段就够了 —— 不用来回猜、也不用截屏。
+     */
+    private fun buildHyMtDiagnostics(): String {
+        val q = currentHyMtQuant()
+        val st = HyMtModelStore.status(q)
+        val fileLine = when (st) {
+            is HyMtModelStatus.Ready -> "已就绪 · ${fmtBytes(st.file.length())} · 大小与官方一致"
+            is HyMtModelStatus.Partial -> "下载中 ${st.bytes * 100 / st.expected}%"
+            is HyMtModelStatus.SizeMismatch -> "大小异常 ${fmtBytes(st.bytes)}（应为 ${fmtBytes(st.expected)}）"
+            HyMtModelStatus.Missing -> "未下载"
+        }
+        return buildString {
+            append("【屏幕翻译 v1.17.0 诊断】\n")
+            append("设备：").append(HyMtDeviceSupport.summary).append('\n')
+            HyMtDeviceSupport.reasonIfUnsupported?.let { append("守卫：").append(it).append('\n') }
+            append("量化档：").append(q.displayName).append('\n')
+            append("模型文件：").append(fileLine).append('\n')
+            append("运行时：").append(HyMtRuntime.statusLine()).append('\n')
+            HyMtRuntime.rssMb()?.let { append("进程内存：RSS ").append(it).append(" MB\n") }
+            HyMtRuntime.lastLatencySummary()?.let { append(it).append('\n') }
+            append("模型目录占用：").append(fmtBytes(HyMtModelStore.usedBytes()))
+        }
     }
 
     private fun currentHyMtQuant(): HyMtQuant =
@@ -223,8 +258,9 @@ class EngineSettingsActivity : BaseActivity() {
             is HyMtModelStatus.Ready -> buildString {
                 append("模型状态：已就绪（${fmtBytes(st.file.length())}）")
                 append("\n运行时：").append(HyMtRuntime.statusLine())
-                // 实测延迟由运行时回报 —— 用户装机后可以直接念这一行给我，不必截屏
+                // 实测延迟/内存由运行时回报 —— 用户装机后念这一行给我即可，不必截屏
                 HyMtRuntime.lastLatencySummary()?.let { append("\n").append(it) }
+                HyMtRuntime.rssMb()?.let { append("\n进程内存：RSS ").append(it).append(" MB") }
             }
             is HyMtModelStatus.Partial -> {
                 val pct = (st.bytes * 100 / st.expected).toInt()
