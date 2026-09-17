@@ -2,6 +2,7 @@ package com.hunter.screentranslator.util
 
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.api.HttpClients
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -237,6 +238,8 @@ object HyMtModelStore {
         progress: HyMtProgress? = null,
     ): Result<File> = withContext(Dispatchers.IO) {
         mutex.withLock {
+            // 用 try 包住 runCatching：取消必须原样抛出，不能变成"失败结果"
+            try {
             runCatching {
                 val part = partFileFor(quant)
                 part.delete()
@@ -272,6 +275,11 @@ object HyMtModelStore {
                     part.delete()
                 }
                 dst
+            }
+            } catch (ce: CancellationException) {
+                // 用户退出设置页会让 lifecycleScope 取消协程。若把它当成"导入失败"，
+                // 轻则显示误导信息，重则此时 Activity 已销毁、弹窗抛 BadTokenException 崩掉。
+                throw ce
             }
         }
     }

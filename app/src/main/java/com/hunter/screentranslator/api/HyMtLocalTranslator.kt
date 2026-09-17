@@ -6,11 +6,15 @@ import com.hunter.screentranslator.App
 import com.hunter.screentranslator.util.HyMtModelStatus
 import com.hunter.screentranslator.util.HyMtModelStore
 import com.hunter.screentranslator.util.HyMtQuant
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -155,7 +159,11 @@ object HyMtRuntime {
         return "已加载 $key（${m.config.threads} 线程 / 上下文 ${m.config.contextSize}）"
     }
 
-    suspend fun generate(prompt: String, maxNewTokens: Int): Result<String> = runCatching {
+    suspend fun generate(prompt: String, maxNewTokens: Int): Result<String> = try {
+        // 调用方（读屏在"屏幕又变了"时、输入翻译的 600ms 防抖）会 cancel 上一个 job。
+        // 这里先抓住调用方的 Job，供下面的哨兵判断"是我被取消了，还是正常跑完"。
+        val callerJob = coroutineContext[Job]
+        Result.success(
         withModel { m ->
             // 用模型自身配置复制一份，只改采样参数：避免把 contextSize/threads
             // 这类"加载期参数"在生成期重新传一遍而语义不明。
@@ -167,24 +175,49 @@ object HyMtRuntime {
                 this.maxTokens = maxNewTokens
                 seed = -1
             }
-            // 调用方被取消时（本 App 的读屏/实时链路在"屏幕又变了"时就会
-            // cancel 上一个 job），必须把取消传进 native 解码循环。
-            // 否则这一句会继续算到 maxTokens 才停 —— 16 tok/s 下 1024 token 是
-            // 一分多钟，而这期间 mutex 一直被占，后面所有翻译请求全被堵死，
-            // 用户看到的是"本地引擎卡死"。
-            val cancelHook = coroutineContext[Job]?.invokeOnCompletion { cause ->
-                if (cause != null) runCatching { m.cancelGeneration() }
-            }
-            try {
-                cleanOutput(m.generate(buildPrompt(m, prompt), cfg))
-            } finally {
-                cancelHook?.dispose()
+            // 哨兵：协程取消**打断不了**正在跑的 native 解码循环（它只在每次生成
+            // 开始时看一次取消标志），所以挂一个随父协程一起被取消的子协程，
+            // 在它的 finally 里显式通知 native 停下。否则这一句会白算到 maxTokens
+            // （16 tok/s 下上限 1024 就是一分多钟），期间推理 mutex 一直被占，
+            // 后面所有翻译请求全排队 —— 现象是"本地引擎卡死"。
+            // 正常跑完时 callerJob 未被取消，哨兵不会误设取消标志（下一句不受影响；
+            // 而且 native 每次 generate 开头都会重置该标志）。
+            coroutineScope {
+                val sentinel = launch(start = CoroutineStart.UNDISPATCHED) {
+                    try {
+                        awaitCancellation()
+                    } finally {
+                        if (callerJob?.isCancelled == true) {
+                            runCatching { m.cancelGeneration() }
+                        }
+                    }
+                }
+                try {
+                    cleanOutput(m.generate(buildPrompt(m, prompt), cfg))
+                } finally {
+                    sentinel.cancel()
+                }
             }
         }
+        )
+    } catch (ce: CancellationException) {
+        // 关键：取消不是"翻译失败"。以前这里用 runCatching 把 CancellationException
+        // 转成了 Result.failure，于是被取消的那一句会显示成
+        // "翻译失败：StandaloneCoroutine was cancelled"（v1.17.0 装机反馈的实际现象）。
+        // 必须原样抛出，让调用方的协程正常结束、由新的一次翻译接管界面。
+        throw ce
+    } catch (t: Throwable) {
+        Result.failure(t)
     }
 
     /** 设置页的"预加载模型"：把几秒的加载耗时挪到用户主动点击的时候 */
-    suspend fun preload(): Result<Unit> = runCatching { withModel { } }
+    suspend fun preload(): Result<Unit> = try {
+        Result.success(withModel { })
+    } catch (ce: CancellationException) {
+        throw ce
+    } catch (t: Throwable) {
+        Result.failure(t)
+    }
 
     suspend fun unload() {
         mutex.withLock { closeLocked() }

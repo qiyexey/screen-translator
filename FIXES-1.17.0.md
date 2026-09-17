@@ -143,6 +143,24 @@
 改法：在 `generate` 里挂 `coroutineContext[Job].invokeOnCompletion`，
 一旦因取消而结束就调 `model.cancelGeneration()` 让 native 立刻收尾。
 
+**装机后实测到的第一个 bug 就在这条线上**（用户反馈截图）：
+译文出来之前有时会闪一句 `翻译失败：StandaloneCoroutine was cancelled`。
+根因不是 native，而是**我这里的 `runCatching` 把 `CancellationException` 吞掉并
+转成了 `Result.failure`** —— 于是"上一次翻译被取消"被当成"翻译失败"显示出来。
+云端引擎看不到这个现象，是因为它们的阻塞式 OkHttp 调用在 `runCatching` **之外**
+才撞上取消检查。
+
+改法：`generate` / `preload` / `importFrom` 一律 **原样抛出 CancellationException**，
+让取消走结构化并发的正常路径（调用方的协程直接结束，由新的一次翻译接管界面）。
+`importFrom` 那条尤其要修：用户退出设置页会取消协程，若当成失败，轻则误导，
+重则此时 Activity 已销毁、弹窗抛 `BadTokenException` 崩掉。
+
+取消要真的打断 native，还得靠"哨兵"子协程：`launch(start = UNDISPATCHED) {
+awaitCancellation() } finally { if (调用方已取消) cancelGeneration() }` ——
+因为协程取消**打断不了**正在执行的 native 解码循环，`invokeOnCompletion` 那种
+写法要等协程体结束才触发，等于没有用。哨兵只判"调用方是否真的被取消"，
+正常跑完不会误设取消标志（native 每次 generate 开头也会重置该标志）。
+
 同理，**模型加载**（1.13GB，1~2 秒）用 `withContext(NonCancellable)` 包住：
 调用方（Activity/Service）在加载途中被销毁时，不能让 native 侧留下半初始化的
 context 而 mutex 已经释放 —— 保证"要么完整加载，要么完整不加载"。
