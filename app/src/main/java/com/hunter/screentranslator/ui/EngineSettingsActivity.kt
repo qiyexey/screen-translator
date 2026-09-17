@@ -223,6 +223,8 @@ class EngineSettingsActivity : BaseActivity() {
             is HyMtModelStatus.Ready -> buildString {
                 append("模型状态：已就绪（${fmtBytes(st.file.length())}）")
                 append("\n运行时：").append(HyMtRuntime.statusLine())
+                // 实测延迟由运行时回报 —— 用户装机后可以直接念这一行给我，不必截屏
+                HyMtRuntime.lastLatencySummary()?.let { append("\n").append(it) }
             }
             is HyMtModelStatus.Partial -> {
                 val pct = (st.bytes * 100 / st.expected).toInt()
@@ -482,9 +484,16 @@ class EngineSettingsActivity : BaseActivity() {
             result.fold(
                 onSuccess = { translated ->
                     OverlayService.update("Hello! This is a translation test.", translated)
+                    // 本地引擎没有"密钥/网络"，有意义的是耗时；云端引擎保持原文案
+                    val extra = if (engine == TranslationEngine.HYMT_LOCAL) {
+                        HyMtRuntime.lastLatencySummary()?.let { "$it\n（首次翻译包含模型加载时间）" }
+                            ?: "本地推理完成。"
+                    } else {
+                        "密钥和网络均正常。"
+                    }
                     AlertDialog.Builder(this@EngineSettingsActivity)
                         .setTitle("✅ 测试成功（$engineName）")
-                        .setMessage("翻译结果：$translated\n\n密钥和网络均正常。")
+                        .setMessage("翻译结果：$translated\n\n$extra")
                         .setPositiveButton("好的", null)
                         .show()
                 },

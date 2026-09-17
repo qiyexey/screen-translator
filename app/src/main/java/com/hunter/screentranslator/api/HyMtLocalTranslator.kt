@@ -152,6 +152,27 @@ object HyMtRuntime {
     val isLoaded: Boolean get() = model != null
     val loadedKeyOrNull: String? get() = loadedKey
 
+    /**
+     * 最近一次翻译的实测延迟与规模（毫秒 / 行数 / 字符数）。
+     *
+     * 为什么放这里：本机没有设备控制授权，装不了也点不了 App —— 用户看到的数字
+     * 只能由 App 自己报出来。设置页会把这三项显示在模型状态下面，
+     * 用户截一句话就能代替我跑一次基准。
+     */
+    @Volatile var lastLatencyMs: Long = 0
+        private set
+    @Volatile var lastLines: Int = 0
+        private set
+    @Volatile var lastChars: Int = 0
+        private set
+
+    /** 实测延迟摘要；还没翻译过则返回 null */
+    fun lastLatencySummary(): String? {
+        val ms = lastLatencyMs
+        if (ms <= 0) return null
+        return "上次翻译：${ms} ms（${lastLines} 行 / ${lastChars} 字）"
+    }
+
     /** 供设置页显示"模型已加载/未加载" */
     fun statusLine(): String {
         val m = model ?: return "未加载"
@@ -193,7 +214,13 @@ object HyMtRuntime {
                     }
                 }
                 try {
-                    cleanOutput(m.generate(buildPrompt(m, prompt), cfg))
+                    val t0 = SystemClock.elapsedRealtime()
+                    val out = cleanOutput(m.generate(buildPrompt(m, prompt), cfg))
+                    // 只有成功返回才记数：被取消的那次不应该污染"实测延迟"
+                    lastLatencyMs = SystemClock.elapsedRealtime() - t0
+                    lastLines = prompt.count { it == '\n' } + 1
+                    lastChars = prompt.length
+                    out
                 } finally {
                     sentinel.cancel()
                 }
