@@ -226,6 +226,12 @@ jobs:
           APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
           ASSET="screen-translator-${TAG}.apk"
 
+          # 先把产物复制成想要的文件名，再上传。
+          # 不要用 gh 的 "path#name" 写法 —— 那个 # 后面是**标签(label)**，
+          # 不是文件名：资产名仍会是 app-release.apk，只是多挂一个显示标签。
+          cp "$APK" "/tmp/$ASSET"
+          APK="/tmp/$ASSET"
+
           # 校验值：让下载的人能确认拿到的包没被中途替换
           SHA256=$(sha256sum "$APK" | cut -d' ' -f1)
           SIZE=$(du -h "$APK" | cut -f1)
@@ -259,6 +265,6 @@ jobs:
             --verify-tag \
             --title "$TAG" \
             --notes-file /tmp/release-notes.md \
-            "$APK#$ASSET"
+            "$APK"
 
           echo "✅ 已发布 Release：$TAG（资产名 $ASSET）"
