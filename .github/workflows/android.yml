@@ -28,7 +28,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  # contents: write 只为了在推 tag 时创建 Release 页并上传 APK。
+  # 注意：写权限**只在 tag 触发的运行**里被真正用到；main / PR 触发的运行
+  # 走不到那一步（有 if 守卫），因此不会因为多给了权限而产生副作用。
+  contents: write
 
 jobs:
   build:
@@ -102,6 +105,7 @@ jobs:
         run: ./gradlew --no-daemon assembleDebug
 
       - name: Upload APK
+        id: apk
         if: steps.signing.outputs.available == 'true'
         uses: actions/upload-artifact@v4
         with:
@@ -205,3 +209,56 @@ jobs:
           else
             echo "### 仅构建验证（无签名密钥）" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      # ---- 推 tag → 建 Release 页，把签名过的 APK 直接挂上去 ----
+      # 条件不满足就跳过：不是 tag / 没签名密钥（PR 或没配 Secrets）。
+      # 用 tag 名当 Release 标题，正文自动附提交哈希与校验值，方便对包溯源。
+      #
+      # 注意 --notes 的值改用临时文件（--notes-file）而不是内联字符串：
+      # 内联多行时，YAML 的块缩进会被原样带进正文，Markdown 表格会渲染不出来。
+      - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v') && steps.signing.outputs.available == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          TAG="${GITHUB_REF_NAME}"
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          ASSET="screen-translator-${TAG}.apk"
+
+          # 校验值：让下载的人能确认拿到的包没被中途替换
+          SHA256=$(sha256sum "$APK" | cut -d' ' -f1)
+          SIZE=$(du -h "$APK" | cut -f1)
+
+          # 已存在同名 Release 时明确提示，而不是静默覆盖 —— 覆盖会让已下载的人对不上号
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "::warning::Release $TAG 已存在，跳过创建（要重发请先在页面上删掉旧 Release）"
+            exit 0
+          fi
+
+          cat > /tmp/release-notes.md <<EOF
+          自动构建于提交 \`${GITHUB_SHA}\`。
+
+          **直接下载**：把下方 **Assets** 里的 \`${ASSET}\` 传到手机上安装。
+
+          | 项目 | 值 |
+          |---|---|
+          | 版本 | \`${TAG}\` |
+          | APK 大小 | ${SIZE} |
+          | SHA-256 | \`${SHA256}\` |
+          | 签名 | 非调试密钥（CN=Screen Translator，RSA 4096） |
+
+          > 本包已由 CI 完成 R8 混淆与正式签名，混淆判据、签名校验均已通过。
+          > 安装前建议核对 SHA-256。
+          EOF
+          # 剥掉 heredoc 为对齐 YAML 而带入的前导空格
+          sed -i 's/^          //' /tmp/release-notes.md
+
+          # --verify-tag：tag 必须已存在，防止误建一个指向空提交的 Release
+          gh release create "$TAG" \
+            --verify-tag \
+            --title "$TAG" \
+            --notes-file /tmp/release-notes.md \
+            "$APK#$ASSET"
+
+          echo "✅ 已发布 Release：$TAG（资产名 $ASSET）"
