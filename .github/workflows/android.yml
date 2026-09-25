@@ -56,6 +56,18 @@ jobs:
           gradle-version: '8.7'
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
 
+      # ---- 确保脚本可执行（v1.27.1）----
+      #
+      # 背景：gradlew 与 scripts/*.sh 在 git 里曾被记录为 100644（无可执行位），
+      # Linux runner 上执行 `./gradlew` 直接 Permission denied（exit 126）。
+      # 而且这个错**只在 Linux 上暴露** —— Windows 的 NTFS 不理会可执行位，
+      # 本地怎么跑都没事，所以能潜伏很久。
+      #
+      # 根因已用 `git update-index --chmod=+x` 修掉，这一行是第二道保险：
+      # 以后新加的 .sh 忘了打权限位，也不会再让整条流水线挂掉。
+      - name: Ensure scripts are executable
+        run: chmod +x gradlew scripts/*.sh jni/*.sh 2>/dev/null || true
+
       # ---- 只有拿到密钥的构建（main / tag / 手动）才做正式签名 ----
       - name: Decode signing keystore
         id: signing
