@@ -137,16 +137,62 @@ jobs:
       - name: Verify R8 actually obfuscated
         if: steps.signing.outputs.available == 'true'
         run: |
-          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
-          BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
-          # 混淆生效的判据：自有包名下的类名应当消失（只剩清单里必须保留的组件）。
-          # v1.17.0 的包里 com/hunter/screentranslator/ui/MainActivity 等
-          # 类名与包结构全都原样可见 —— 那种情况这里会直接失败。
-          if unzip -p "$APK" classes.dex | strings | grep -qE 'Lcom/hunter/screentranslator/(ui|api|util)/[A-Z][A-Za-z]+;'; then
-            echo "::error::自有类名仍然可见，混淆未生效"
+          # v1.27.2：判据重写。
+          #
+          # 原判据是「自有包名下不应再出现形如 Lcom/.../ui/Xxx; 的类引用」，
+          # 这个假设是错的 —— **AndroidManifest 里声明的组件名在 R8 下必然保留**：
+          # Activity / Service / Receiver / Application 都靠系统反射实例化，
+          # 名字被混淆系统就找不到它们。所以那份名单在正常构建里**一定存在**，
+          # 旧判据在任何一次真正跑通的构建上都会失败。
+          #
+          # （它从 v1.18.0 写下去就一直没被执行过 —— 因为 gradlew 缺可执行位，
+          #   流水线每次都早早挂在 exit 126，这条检查根本没机会跑到。
+          #   修掉权限位之后，它才第一次显形。）
+          #
+          # 新判据用 **mapping.txt**，不去猜哪些名字该留、也不定死数字阈值：
+          #   ① 保留原名的自有类**只能**是清单组件或 Application。
+          #      出现任何别的东西，说明 keep 规则放太宽、逻辑被暴露。
+          #   ② 真正含逻辑的包（api / util / overlay）必须一个都不出现在保留名单里。
+          #      这一条是实质判据 —— v1.17.0 那种"类名与包结构全原样可见"的包，
+          #      api.BaiduTranslator 等一定会在这份名单里，当场被抓。
+          #   ③ 被重命名的自有类**数量级**要够（> 100 是宽松下限，实测 439）。
+          MAP=app/build/outputs/mapping/release/mapping.txt
+          if [ ! -f "$MAP" ]; then
+            echo "::error::缺少 $MAP —— 说明 R8 没跑，或 minifyEnabled 被关掉了"
             exit 1
           fi
-          echo "✅ 混淆已生效"
+
+          # 「映射前后相同」= 保留原名。用 awk 精确按字段切，不用正则猜格式。
+          KEPT=$(awk -F' -> ' '/^com\.hunter\.screentranslator\./ { n=$2; sub(/:$/, "", n); if ($1 == n) print $1 }' "$MAP" | sort -u)
+          # 「映射前后不同」= 被重命名。与 KEPT 同源，口径一致。
+          RENAMED=$(awk -F' -> ' '/^com\.hunter\.screentranslator\./ { n=$2; sub(/:$/, "", n); if ($1 != n) print $1 }' "$MAP" | sort -u | grep -c . || true)
+          KEPT_N=$(printf '%s\n' "$KEPT" | grep -c . || true)
+
+          echo "自有类：被重命名 $RENAMED 个，保留原名 $KEPT_N 个"
+          echo "--- 保留原名的类（应全部是清单组件）---"
+          printf '%s\n' "$KEPT"
+
+          if [ "$RENAMED" -lt 100 ]; then
+            echo "::error::只有 $RENAMED 个自有类被重命名（预期 >100），混淆疑似未生效"
+            exit 1
+          fi
+
+          # 判据 ②：含逻辑的包不得出现在保留名单里
+          if printf '%s\n' "$KEPT" | grep -qE '\.(api|util|overlay)\.'; then
+            echo "::error::以下含逻辑的类未被混淆，检查 proguard-rules.pro 的 keep 规则："
+            printf '%s\n' "$KEPT" | grep -E '\.(api|util|overlay)\.'
+            exit 1
+          fi
+
+          # 判据 ①：保留名单里不许有"非清单组件"的名字
+          BAD=$(printf '%s\n' "$KEPT" | grep -vE '\.(ui|service|receiver)\.[A-Za-z]+$' | grep -v '\.App$' || true)
+          if [ -n "$BAD" ]; then
+            echo "::error::以下保留原名的类既不是清单组件、也不是 Application："
+            printf '%s\n' "$BAD"
+            exit 1
+          fi
+
+          echo "✅ 混淆已生效（$RENAMED 个类被重命名，保留的 $KEPT_N 个均为清单必需组件）"
 
       - name: Summary
         run: |
