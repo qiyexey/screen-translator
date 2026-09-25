@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  仅供代码里 `View.setTag(int, Object)` 使用的 id。
+
+  v1.18.0：EdgeToEdge.padContent() 用它给已处理过 insets 的根视图打标记，
+  保证重复调用不会把系统栏高度叠加两次。不占布局属性，也不会进资源收缩的
+  删除名单（有 R.id.tag_edge_to_edge 的静态引用）。
+-->
+<resources>
+    <item name="tag_edge_to_edge" type="id" />
+</resources>

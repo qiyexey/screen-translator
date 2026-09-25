@@ -39,13 +39,15 @@ open class OpenAICompatibleTranslator(
         imageBytes: ByteArray,
         mimeType: String,
         targetLang: String,
-        hint: String?
+        hint: String?,
+        sourceLang: String
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             require(apiKey.isNotBlank()) { "未配置 $engineName API Key" }
             require(imageBytes.isNotEmpty()) { "图片数据为空" }
 
             val targetName = LANG_DISPLAY[targetLang] ?: targetLang
+            val sourceName = sourceNameOf(sourceLang)
             val dataUri = "data:$mimeType;base64,${Base64.encodeToString(imageBytes, Base64.NO_WRAP)}"
 
             val body = JSONObject().apply {
@@ -61,7 +63,7 @@ open class OpenAICompatibleTranslator(
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
-                        put("content", buildImageSystemPrompt(targetName, hint))
+                        put("content", buildImageSystemPrompt(targetName, hint, sourceName))
                     })
                     put(JSONObject().apply {
                         put("role", "user")
@@ -110,13 +112,18 @@ open class OpenAICompatibleTranslator(
         }
     }
 
-    override suspend fun translate(text: String, targetLang: String): Result<String> =
+    override suspend fun translate(
+        text: String,
+        targetLang: String,
+        sourceLang: String
+    ): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 if (text.isBlank()) return@runCatching ""
                 require(apiKey.isNotBlank()) { "未配置 $engineName API Key" }
 
                 val targetName = LANG_DISPLAY[targetLang] ?: targetLang
+                val sourceName = sourceNameOf(sourceLang)
 
                 val body = JSONObject().apply {
                     put("model", model.ifBlank { "deepseek-chat" })
@@ -125,7 +132,7 @@ open class OpenAICompatibleTranslator(
                     put("messages", JSONArray().apply {
                         put(JSONObject().apply {
                             put("role", "system")
-                            put("content", buildSystemPrompt(targetName))
+                            put("content", buildSystemPrompt(targetName, sourceName))
                         })
                         put(JSONObject().apply {
                             put("role", "user")
@@ -159,18 +166,39 @@ open class OpenAICompatibleTranslator(
             }
         }
 
-    private fun buildSystemPrompt(targetName: String): String = """
-        你是一个专业的实时屏幕翻译引擎。用户会给你一段从屏幕上抓取的文字，你需要：
+    /**
+     * 文本翻译的系统提示词。
+     *
+     * v1.20.0：第 1 条从写死的「自动识别原文使用的语言」改成按 [sourceName] 生成。
+     * [sourceName] 为 null 时保持原文案（自动识别），所以不指定源语言的老行为逐字不变。
+     *
+     * 与 [buildImageSystemPrompt] 同理，指定语言的那一行是**拼在三引号块之外**的：
+     * trimIndent() 在插值之后执行，块内插值若含换行会改写整段的缩进。
+     * 这里插的是一句短句没有换行，但仍统一走同一套写法 —— 免得后来者改文案时
+     * 不小心在插值里加了换行。
+     */
+    private fun buildSystemPrompt(targetName: String, sourceName: String?): String {
+        val base = """
+            你是一个专业的实时屏幕翻译引擎。用户会给你一段从屏幕上抓取的文字，你需要：
 
-        1. 自动识别原文使用的语言（即使包含多种语言混合）。
-        2. 把它翻译成【$targetName】。
-        3. 只输出翻译结果本身，不要解释、不要原译文对照、不要分点、不要任何额外说明。
-        4. 如果原文本身就是 $targetName，则原样输出。
-        5. 保留原文的换行结构、标点风格、专有名词。
-        6. 如果原文是 UI 按钮/菜单文字，翻译要简洁；如果是长段落，翻译要自然流畅。
+            1. 原文使用的语言是【$SOURCE_AUTO_LABEL】。
+            2. 把它翻译成【$targetName】。
+            3. 只输出翻译结果本身，不要解释、不要原译文对照、不要分点、不要任何额外说明。
+            4. 如果原文本身就是 $targetName，则原样输出。
+            5. 保留原文的换行结构、标点风格、专有名词。
+            6. 如果原文是 UI 按钮/菜单文字，翻译要简洁；如果是长段落，翻译要自然流畅。
 
-        现在请翻译：
-    """.trimIndent()
+            现在请翻译：
+        """.trimIndent()
+        // 占位符换成真实描述：自动识别 or 具体语言名
+        val langLine = if (sourceName == null) {
+            "自动识别（即使包含多种语言混合）"
+        } else {
+            "$sourceName（已由用户指定，请直接按 $sourceName 理解原文，不要再自行判断；" +
+                "遇到不符合的文法也按 $sourceName 处理）"
+        }
+        return base.replace(SOURCE_AUTO_LABEL, langLine)
+    }
 
     /**
      * v1.8.0 图片翻译用的系统提示词：强调"只翻画面里的文字"。
@@ -179,8 +207,15 @@ open class OpenAICompatibleTranslator(
      * 而不是直接塞进 `"""..."""` 里做插值：trimIndent() 是在插值**之后**才执行的，
      * 插入内容里的换行会参与"最小缩进"的计算，导致整段提示词的缩进被意外改写。
      * 拼在外面就不存在这个问题。
+     *
+     * v1.20.0 支持 [sourceName]（同 [buildSystemPrompt]，null = 自动识别），
+     * 拼接方式与 hint 一致 —— 走块外追加，不参与 trimIndent。
      */
-    private fun buildImageSystemPrompt(targetName: String, hint: String? = null): String {
+    private fun buildImageSystemPrompt(
+        targetName: String,
+        hint: String? = null,
+        sourceName: String? = null
+    ): String {
         val base = """
             你是一个专业的屏幕翻译引擎。用户会给你一张手机屏幕截图，你需要：
 
@@ -192,12 +227,42 @@ open class OpenAICompatibleTranslator(
             6. 保留原文的换行与段落结构；UI 短标签译得简洁，长段落译得自然。
         """.trimIndent()
         val extra = if (hint.isNullOrBlank()) "" else "\n\n【本次输入的特殊说明】\n$hint"
-        return "$base$extra\n\n现在请翻译画面里的文字："
+        val srcNote = if (sourceName == null) {
+            ""
+        } else {
+            "\n\n【画面文字的语言】\n画面里的文字是 $sourceName。" +
+                "请直接按 $sourceName 理解，不要自行判断语种；遇到不符合 $sourceName " +
+                "文法的部分也照 $sourceName 处理。"
+        }
+        return "$base$extra$srcNote\n\n现在请翻译画面里的文字："
     }
+
+    /**
+     * 把 [sourceLang] 转成提示词里的语言名；[SOURCE_AUTO] 返回 null（表示交给模型自动识别）。
+     *
+     * 走 [LANG_DISPLAY] 与目标语言同一张表：表里没有的代码原样透出，
+     * 与 `LANG_DISPLAY[targetLang] ?: targetLang` 的处理一致 ——
+     * 大模型看到未知代码也能大致理解，而传统机翻那边则会明确报错。
+     */
+    private fun sourceNameOf(sourceLang: String): String? =
+        if (sourceLang == SOURCE_AUTO) null else (LANG_DISPLAY[sourceLang] ?: sourceLang)
 
     companion object {
         /** 视觉请求的输出上限：长截图的长译文需要足够空间，否则会被截断 */
         private const val VISION_MAX_TOKENS = 4096
+
+        /**
+         * 源语言占位符。
+         *
+         * 为什么用"占位符 + replace"而不是在 `"""…"""` 里直接插 `$langLine`：
+         * 一是 trimIndent 与插值的先后顺序问题（见 [buildImageSystemPrompt] 注释），
+         * 二是这里**必须**在块内保留一个可见的占位位置 —— 若写成
+         * `1. 原文使用的语言是【$langLine】`，当 langLine 为空串时，
+         * 整行会退化成「1. 原文使用的语言是【】。」，比不写这行还糟。
+         * 占位符方案保证这行无论哪种情况都有完整内容。
+         */
+        private const val SOURCE_AUTO_LABEL = "\u0000SRC\u0000"
+
         /**
          * 由 baseUrl 构造完整 chat/completions 端点。
          * 兼容各种版本后缀：

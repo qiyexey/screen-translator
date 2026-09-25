@@ -655,7 +655,7 @@ class LiveTranslateService : Service() {
         Log.i(TAG, "OCR ${newLines.size} 行，沿用前 $from 行，需翻译 ${pending.size} 行")
 
         val src = pending.joinToString("\n")
-        val result = TranslatorFactory.current().translate(src, App.prefs.targetLang)
+        val result = TranslatorFactory.current().translate(src, App.prefs.targetLang, App.prefs.sourceLang)
         requestCount++
         notifyState()
 
@@ -686,7 +686,7 @@ class LiveTranslateService : Service() {
             // 行数对不上：模型可能合并或拆分了行。为避免错位，退回整框重译。
             Log.w(TAG, "行数不匹配（送出 ${pending.size} 行，返回 ${got.size} 行）→ 退回整框重译")
             val all = TranslatorFactory.current()
-                .translate(newLines.joinToString("\n"), App.prefs.targetLang)
+                .translate(newLines.joinToString("\n"), App.prefs.targetLang, App.prefs.sourceLang)
             requestCount++
             notifyState()
             val allOut = all.getOrNull()
@@ -771,7 +771,7 @@ class LiveTranslateService : Service() {
             }.onFailure { Log.w(TAG, "落盘最近一次取图失败: $it") }
 
             val result = TranslatorFactory.current()
-                .translateImage(bytes, "image/jpeg", App.prefs.targetLang, GAME_HINT)
+                .translateImage(bytes, "image/jpeg", App.prefs.targetLang, GAME_HINT, App.prefs.sourceLang)
 
             requestCount++
             notifyState()

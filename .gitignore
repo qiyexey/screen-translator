@@ -14,9 +14,14 @@ local.properties
 
 # ---- 签名密钥：绝不入库 ----
 # release.keystore 曾随源码一起分发过，其口令对任何拿到仓库的人都可见，
-# 等同密钥已泄漏。这里明确排除，请在本地用 keytool 自行生成（见 README）。
+# 等同密钥已泄漏。这里明确排除，请在本地用 keytool 自行生成
+#（v1.18.0 起有现成脚本：bash scripts/gen-keystore.sh）。
 *.jks
 *.keystore
+# v1.18.0：口令文件。与 keystore 同等敏感 —— 只有 keystore 没有口令也签不了，
+# 但反过来把口令漏出去等于把 keystore 一起漏出去。
+keystore.properties
+keystore.properties.*
 
 # ---- 构建产物 ----
 *.apk
@@ -25,8 +30,18 @@ local.properties
 *.dex
 *.zip
 
+# ---- R8 混淆映射表 ----
+# 这是**必须归档、但绝不能公开**的东西：它能把混淆后的类名/方法名还原成源码原名，
+# 拿到它等于拿到完整代码结构。CI 里作为私有构建产物上传（见
+# .github/workflows/android.yml），本地也不要留在仓库里。
+mapping.txt
+seeds.txt
+usage.txt
+configuration.txt
+
 # ---- 编辑器 / 系统 ----
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
+shots/

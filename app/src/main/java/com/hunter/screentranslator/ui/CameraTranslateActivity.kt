@@ -7,15 +7,9 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Matrix
-import android.graphics.Paint
-import android.graphics.Rect
-import android.graphics.RectF
-import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
-import android.os.SystemClock
 import android.util.Log
 import android.view.Gravity
-import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
@@ -39,18 +33,15 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.button.MaterialButton
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
 import com.hunter.screentranslator.api.TranslatorFactory
+import com.hunter.screentranslator.util.EdgeToEdge
 import com.hunter.screentranslator.util.HistoryStore
 import com.hunter.screentranslator.util.OcrEngine
 import com.hunter.screentranslator.util.Speaker
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
-import kotlin.math.hypot
 
 /**
  * 拍照翻译。v1.11.0 引入，**v1.14.0 改为「拍哪译哪 · 译文贴原文」**。
@@ -71,7 +62,7 @@ import kotlin.math.hypot
  * 3. **快门 = 整屏逐行贴合**：所有识别到的行各自成一次翻译，译文各自盖回原位。
  *    逐行而不是整段，是为了保证**位置对齐不发生错位** —— 整段译文只有一坨文字，
  *    无法可靠地拆回各行（引擎可能合并/重排/改写行结构，拆错就等于把 A 的译文贴到 B 上）。
- *    代价是行数多时请求数多，所以：同一行文字只发一次请求（去重）、并发上限 [MAX_PARALLEL]、
+ *    代价是行数多时请求数多，所以：同一行文字只发一次请求（去重）、并发上限 [com.hunter.screentranslator.util.LineOverlayEngine.MAX_PARALLEL]、
  *    并且复用 v1.10.0 的翻译缓存（[com.hunter.screentranslator.api.CachingTranslator]
  *    按「引擎+端点+模型+目标语言+原文」命中，重复内容零请求零费用）。
  * 3. **需要上下文时**：底部「📄 全文」走一次整段翻译（一次请求、带上下文、译文更连贯），
@@ -86,7 +77,7 @@ import kotlin.math.hypot
  * - 坐标换算：[frameTransform] 用的是与 `PreviewView` 相同的 `FILL_CENTER` 规则
  *   （取 `max` 缩放 + 居中裁切），这样"位图坐标 ↔ 屏幕坐标"与用户在取景框里看到的一致。
  * - **先缩再冻**（[processCapture]）：冻结帧要常驻到用户重拍，所以只保留最长边
- *   ≤ [MAX_OCR_SIDE] 的那一张，相机原图立刻 `recycle()`（12MP 原图 ≈ 48MB）。
+ *   ≤ [com.hunter.screentranslator.util.LineOverlayEngine.MAX_OCR_SIDE] 的那一张，相机原图立刻 `recycle()`（12MP 原图 ≈ 48MB）。
  *   冻结帧同时充当 OCR 输入，识别框与贴片因此天然同坐标系，不需要再换算一次。
  * - 位图直接来自相机，与 MediaProjection 无关，因此没有"每次会话都要重新授权"
  *   的限制，也不需要无障碍截图能力。
@@ -97,21 +88,10 @@ class CameraTranslateActivity : AppCompatActivity() {
         const val TAG = "ScreenTranslator"
         const val REQ_CAMERA = 1001
 
-        /** 冻结帧（= 显示图 = 送 OCR 的图）最长边上限：相机出图常有 4000px 级，先缩能省内存 */
-        const val MAX_OCR_SIDE = 2000
-
-        /** 逐行翻译的并发上限：太高会被引擎限流（429），太低整屏要等很久 */
-        const val MAX_PARALLEL = 4
-
-        /** 点选容差（dp）：没点进文字框时，取这个范围内最近的一行 */
-        const val TAP_TOLERANCE_DP = 40
-
-        /**
-         * 按下多久算「按住看原文」（ms）。
-         * 比 [android.view.ViewConfiguration.getLongPressTimeout]（500ms）短一些：
-         * 这是"偷看一眼原文"，手感要跟得上手指，不能等半秒。
-         */
-        const val PEEK_DELAY_MS = 220L
+        // v1.25.0：MAX_OCR_SIDE / MAX_PARALLEL / TAP_TOLERANCE_DP / PEEK_DELAY_MS
+        // 四个常量都随实现迁到了共享引擎
+        // [com.hunter.screentranslator.util.LineOverlayEngine]（图片翻译也用同一份）。
+        // 留在这里只会变成"改了引擎的参数但拍照翻译没跟上"的隐患。
 
         /** 取景态提示：三个手势一次说清 */
         const val HINT_LIVE = "点一行字就地翻译 · 按快门译整屏 · 按住屏幕看原文"
@@ -130,6 +110,14 @@ class CameraTranslateActivity : AppCompatActivity() {
     /** 译文贴片容器（与冻结帧同坐标系） */
     private lateinit var overlayHost: FrameLayout
 
+    /**
+     * v1.25.0：逐行 OCR → 译文贴回原位的那套逻辑抽成了共享引擎
+     * （[com.hunter.screentranslator.util.LineOverlayEngine]），图片翻译也用同一份。
+     * 这里保留原有的拍照/取景/点选拍照代码，只是把几何换算、贴片渲染、
+     * 逐行翻译调度三块委托给引擎 —— 行为与 v1.24.0 完全一致。
+     */
+    private lateinit var ovEngine: com.hunter.screentranslator.util.LineOverlayEngine
+
     /** 常驻提示/状态（在结果卡片之外，任何时刻都看得见） */
     private lateinit var tvHint: TextView
     private lateinit var tvStatus: TextView
@@ -142,37 +130,103 @@ class CameraTranslateActivity : AppCompatActivity() {
     private lateinit var resultCard: View
 
     private var imageCapture: ImageCapture? = null
-    private var busy = false
     private var lastTranslated = ""
 
-    /** 冻结帧（已按 rotationDegrees 摆正、未缩放的原图） */
-    private var frozen: Bitmap? = null
+    /** 冻结帧（已按 rotationDegrees 摆正、未缩放的原图）—— 与引擎共用同一张 */
+    private val frozen: Bitmap? get() = ovEngine.frame
 
     /** 识别到的行；`box` 已换算回 [frozen] 的像素坐标系 */
-    private var lines: List<OcrEngine.Line> = emptyList()
+    private val lines: List<OcrEngine.Line> get() = ovEngine.lines
 
     /** 行索引 → 译文 */
-    private val translations = HashMap<Int, String>()
-
-    /** 行索引 → 贴片 View（重拍/再次翻译时替换或移除） */
-    private val chips = HashMap<Int, View>()
+    private val translations: HashMap<Int, String> get() = ovEngine.translations
 
     /** 正在翻译的行索引，用于高亮"哪几行在等" */
-    private val inFlight = HashSet<Int>()
+    private val inFlight: HashSet<Int> get() = ovEngine.inFlight
 
     /** OCR 拼出的整屏原文，供「📄 全文」与历史记录使用 */
-    private var sourceText = ""
+    private val sourceText: String get() = ovEngine.sourceText
+
+    /** 是否有请求在飞（引擎与按钮状态共用） */
+    private val busy: Boolean get() = ovEngine.busy
+
+    /**
+     * 「📄 全文」整段翻译是否进行中。
+     *
+     * 与 [busy] 分开：整段翻译走的是独立的一条请求，不经过 [ovEngine]，
+     * 但同样要禁用快门并显进度条。v1.25.0 之前这两件事共用一个 `busy` 字段，
+     * 抽引擎后必须拆开，否则会退化成"整段翻译时引擎以为自己在忙"。
+     */
+    private var wholeBusy = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(buildUi())
+        EdgeToEdge.install(this)
+
+        ovEngine = com.hunter.screentranslator.util.LineOverlayEngine(object :
+            com.hunter.screentranslator.util.LineOverlayEngine.Host {
+            override val context: Context get() = this@CameraTranslateActivity
+            override val overlayHost: FrameLayout get() = this@CameraTranslateActivity.overlayHost
+            override val rootView: View get() = root
+            override fun onSourceReady(text: String) { /* 拍照翻译的 sourceText 由 startTranslate 直接用 */ }
+            override fun onStatus(text: String) = setStatus(text)
+            override fun onProgress(show: Boolean) {
+                progress.visibility = if (show) View.VISIBLE else View.GONE
+            }
+            override fun onBusy(busy: Boolean) {
+                btnShutter.isEnabled = !busy
+            }
+            override fun onBatchDone(okCount: Int, total: Int, failed: Int) {
+                setStatus(
+                    "已就地翻译 $okCount/$total 行" +
+                        (if (failed > 0) "（$failed 行失败）" else "") +
+                        " · 点某一行可单独重试，按住屏幕看原文"
+                )
+                val src = lines.indices.filter { translations.containsKey(it) }
+                    .joinToString("\n") { lines[it].text }
+                val dst = lines.indices.filter { translations.containsKey(it) }
+                    .joinToString("\n") { translations[it] ?: "" }
+                if (dst.isNotBlank()) {
+                    addHistory(src, dst, "📷 拍照翻译（贴原文）")
+                    if (App.prefs.ttsAutoSpeak) {
+                        Speaker.speakContent(this@CameraTranslateActivity, src, dst)
+                    }
+                }
+            }
+            override fun onSingleDone(lineIndex: Int, translated: String?) {
+                val line = lines.getOrNull(lineIndex) ?: return
+                setStatus(
+                    if (translated == null) "这一行翻译失败，可点「📄 全文」整段再试"
+                    else "已就地翻译 · 点其他行可继续 · 按住屏幕看原文"
+                )
+                if (translated != null) {
+                    addHistory(line.text, translated, "📷 拍照翻译（点选）")
+                    if (App.prefs.ttsAutoSpeak) {
+                        Speaker.speakContent(this@CameraTranslateActivity, line.text, translated)
+                    }
+                }
+            }
+        })
+        // 引擎需要"让手势层重画"的钩子（画未译行的细框 / 高亮正在翻译的行）
+        ovEngine.lineLayerInvalidator = { lineLayer.invalidate() }
+        ovEngine.onPeekChanged = { peek ->
+            if (peek) setStatus("按住查看原文 · 松开显示译文")
+            else setStatus(
+                when {
+                    translations.isNotEmpty() -> "已就地翻译 ${translations.size} 行 · 点其他行可继续 · 按住可看原文"
+                    lines.isNotEmpty() -> "识别到 ${lines.size} 行 · 点一行即可就地翻译 · 按住可看原文"
+                    else -> "点屏幕上的一行字即可就地翻译"
+                }
+            )
+        }
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
         ) {
             startCamera()
         } else {
-            tvHint.text = "需要相机权限才能拍照翻译"
+            tvHint.text = getString(R.string.camera_translate_t10)
             ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.CAMERA), REQ_CAMERA)
         }
     }
@@ -187,8 +241,8 @@ class CameraTranslateActivity : AppCompatActivity() {
             if (grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
                 startCamera()
             } else {
-                tvHint.text = "未授予相机权限。可到 系统设置 → 应用 → 屏幕翻译 → 权限 里开启"
-                toast("没有相机权限，无法拍照")
+                tvHint.text = getString(R.string.camera_translate_t02)
+                toast(getString(R.string.camera_translate_t05))
             }
         }
     }
@@ -244,14 +298,13 @@ class CameraTranslateActivity : AppCompatActivity() {
      */
     private fun takePhoto(tapX: Float? = null, tapY: Float? = null) {
         val capture = imageCapture ?: run {
-            toast("相机还没就绪")
+            toast(getString(R.string.camera_translate_t06))
             return
         }
         if (busy) {
-            toast("正在处理上一张，请稍候")
+            toast(getString(R.string.camera_translate_t03))
             return
         }
-        busy = true
         btnShutter.isEnabled = false
         if (tapX == null) setStatus("拍摄中…")
 
@@ -261,7 +314,6 @@ class CameraTranslateActivity : AppCompatActivity() {
                 override fun onCaptureSuccess(image: ImageProxy) {
                     val bmp = bitmapFrom(image)
                     if (bmp == null) {
-                        busy = false
                         btnShutter.isEnabled = true
                         setStatus("照片转换失败，请重试")
                         return
@@ -271,7 +323,6 @@ class CameraTranslateActivity : AppCompatActivity() {
 
                 override fun onError(exception: ImageCaptureException) {
                     Log.e(TAG, "拍照失败: ${exception.message}", exception)
-                    busy = false
                     btnShutter.isEnabled = true
                     setStatus("拍照失败：${exception.message}")
                 }
@@ -314,15 +365,12 @@ class CameraTranslateActivity : AppCompatActivity() {
      */
     private fun freezeFrame(bmp: Bitmap) {
         val old = frozen
-        frozen = bmp
         ivFrame.setImageBitmap(bmp)
         ivFrame.visibility = View.VISIBLE
         if (old != null && old !== bmp) runCatching { old.recycle() }
 
-        clearChips()
-        lines = emptyList()
-        sourceText = ""
-        inFlight.clear()
+        // 引擎接管新帧：内部会清贴片、清识别结果、清在飞集合
+        ovEngine.setFrame(bmp)
         lineLayer.resetPeek()
         lineLayer.invalidate()
         resultCard.visibility = View.GONE
@@ -334,11 +382,7 @@ class CameraTranslateActivity : AppCompatActivity() {
         ivFrame.setImageBitmap(null)
         ivFrame.visibility = View.GONE
         frozen?.let { runCatching { it.recycle() } }
-        frozen = null
-        clearChips()
-        lines = emptyList()
-        sourceText = ""
-        inFlight.clear()
+        ovEngine.setFrame(null)
         lineLayer.resetPeek()
         lineLayer.invalidate()
         resultCard.visibility = View.GONE
@@ -347,20 +391,13 @@ class CameraTranslateActivity : AppCompatActivity() {
         setStatus(HINT_LIVE)
     }
 
-    private fun clearChips() {
-        overlayHost.removeAllViews()
-        overlayHost.visibility = View.VISIBLE
-        chips.clear()
-        translations.clear()
-    }
-
     // ==================== OCR + 逐行翻译 ====================
 
     private fun processCapture(bmp: Bitmap, tapX: Float?, tapY: Float?) {
         // **先缩再冻**：相机原图常有 4000px 级（12MP ≈ 48MB ARGB_8888），
         // 而冻结帧要常驻到用户重拍为止。这里只保留"显示 + OCR 共用"的那一张
-        // （≤ [MAX_OCR_SIDE]），原图立刻回收 —— 既省内存，又让识别框与贴片天然同坐标系。
-        val frame = downscale(bmp, MAX_OCR_SIDE)
+        // （≤ [com.hunter.screentranslator.util.LineOverlayEngine.MAX_OCR_SIDE]），原图立刻回收 —— 既省内存，又让识别框与贴片天然同坐标系。
+        val frame = ovEngine.downscale(bmp, com.hunter.screentranslator.util.LineOverlayEngine.MAX_OCR_SIDE)
         if (frame !== bmp) runCatching { bmp.recycle() }
         freezeFrame(frame)
         progress.visibility = View.VISIBLE
@@ -373,11 +410,8 @@ class CameraTranslateActivity : AppCompatActivity() {
             val scanned = withContext(Dispatchers.Default) {
                 OcrEngine.recognize(frame)
             }
-            lines = scanned
-            sourceText = OcrEngine.toPlainText(scanned)
+            ovEngine.setLines(scanned)
             progress.visibility = View.GONE
-            busy = false
-            btnShutter.isEnabled = true
             btnWhole.isEnabled = scanned.isNotEmpty()
             lineLayer.invalidate()
 
@@ -388,155 +422,56 @@ class CameraTranslateActivity : AppCompatActivity() {
 
             if (tapX != null && tapY != null) {
                 // 「点哪译哪」：只翻用户点到的那一行，其余行只画细框、保持干净
-                val hit = pickLineAt(tapX, tapY)
+                val hit = ovEngine.pickLineAt(tapX, tapY)
                 if (hit == null) {
                     setStatus("识别到 ${scanned.size} 行，但你点的位置没文字 —— 点在字上即可就地翻译")
                 } else {
                     setStatus("已锁定这一行，翻译中…")
-                    startTranslate(listOf(hit), single = true)
+                    ovEngine.translateLines(listOf(hit), single = true, scope = lifecycleScope)
                 }
             } else {
                 setStatus("识别到 ${scanned.size} 行 · 整屏逐行贴合中…")
-                startTranslate(scanned.indices.toList(), single = false)
+                ovEngine.translateLines(scanned.indices.toList(), single = false, scope = lifecycleScope)
             }
         }
     }
 
     /**
-     * 逐行翻译 [indices] 并把译文贴回各自原位。
-     *
-     * 三点控制住"行数多 = 请求多"的成本：
-     * 1. **同样的文字只发一次请求**（菜单里"￥38"这种重复行很常见），结果分发给所有同文行；
-     * 2. 并发上限 [MAX_PARALLEL]，避免被引擎限流；
-     * 3. 引擎外面的 [com.hunter.screentranslator.api.CachingTranslator] 按原文命中缓存 ——
-     *    重复翻译同一张图/同一句，零请求零费用。
+     * 逐行翻译 [indices] 并把译文贴回各自原位 —— v1.25.0 起委托给共享引擎
+     * （同文去重 / 并发上限 / 缓存命中都在引擎里）。
      */
     private fun startTranslate(indices: List<Int>, single: Boolean) {
-        val targets = indices.filter { it in lines.indices }
-        if (targets.isEmpty()) return
-        busy = true
-        btnShutter.isEnabled = false
-        progress.visibility = View.VISIBLE
-
-        val total = targets.size
-        var finished = 0
-        var failed = 0
-        val progressText: (Int) -> String = {
-            if (single) "翻译中…" else "翻译中 $it/$total 行…"
-        }
-        setStatus(progressText(0))
-
-        lifecycleScope.launch {
-            val translator = TranslatorFactory.current()
-            val target = App.prefs.targetLang
-
-            // 同文行合并成一组：一组 = 一次请求
-            val groups = LinkedHashMap<String, MutableList<Int>>()
-            for (i in targets) {
-                val key = lines[i].text.trim()
-                if (key.isEmpty()) continue
-                groups.getOrPut(key) { mutableListOf() }.add(i)
-            }
-
-            val semaphore = Semaphore(MAX_PARALLEL)
-            groups.values.map { group ->
-                async(Dispatchers.IO) {
-                    semaphore.withPermit {
-                        withContext(Dispatchers.Main) {
-                            inFlight.addAll(group)
-                            lineLayer.invalidate()
-                        }
-                        val text = lines[group.first()].text.trim()
-                        val result = runCatching { translator.translate(text, target) }
-                            .getOrElse { Result.failure(it) }
-                        withContext(Dispatchers.Main) {
-                            inFlight.removeAll(group.toSet())
-                            val out = result.getOrNull()
-                            if (!out.isNullOrBlank()) {
-                                group.forEach { i ->
-                                    translations[i] = out
-                                    showChip(i, out)
-                                }
-                            } else {
-                                failed += group.size
-                                result.exceptionOrNull()?.let { e ->
-                                    Log.w(TAG, "行翻译失败: ${e.message}")
-                                }
-                            }
-                            finished += group.size
-                            if (!single) setStatus(progressText(finished))
-                            lineLayer.invalidate()
-                        }
-                    }
-                }
-            }.awaitAll()
-
-            busy = false
-            btnShutter.isEnabled = true
-            progress.visibility = View.GONE
-
-            if (single) {
-                val i = targets.first()
-                val out = translations[i]
-                setStatus(
-                    if (out == null) "这一行翻译失败，可点「📄 全文」整段再试"
-                    else "已就地翻译 · 点其他行可继续 · 按住屏幕看原文"
-                )
-                if (out != null) {
-                    addHistory(lines[i].text, out, "📷 拍照翻译（点选）")
-                    if (App.prefs.ttsAutoSpeak) {
-                        Speaker.speakContent(this@CameraTranslateActivity, lines[i].text, out)
-                    }
-                }
-            } else {
-                val ok = targets.count { translations.containsKey(it) }
-                setStatus(
-                    "已就地翻译 $ok/$total 行" +
-                        (if (failed > 0) "（$failed 行失败）" else "") +
-                        " · 点某一行可单独重试，按住屏幕看原文"
-                )
-                // 历史只记一条：逐行译文按阅读顺序拼回去，避免一张图刷出几十条记录
-                val src = targets.filter { translations.containsKey(it) }
-                    .joinToString("\n") { lines[it].text }
-                val dst = targets.filter { translations.containsKey(it) }
-                    .joinToString("\n") { translations[it] ?: "" }
-                if (dst.isNotBlank()) {
-                    addHistory(src, dst, "📷 拍照翻译（贴原文）")
-                    if (App.prefs.ttsAutoSpeak) {
-                        Speaker.speakContent(this@CameraTranslateActivity, src, dst)
-                    }
-                }
-            }
-        }
+        ovEngine.translateLines(indices, single = single, scope = lifecycleScope)
     }
 
     /** 整段翻译：一次请求，带上下文。结果放底部卡片（与原 v1.11.0 行为一致） */
     private fun translateWhole() {
         val text = sourceText
         if (text.isBlank()) {
-            toast("还没识别到文字")
+            toast(getString(R.string.camera_translate_t08))
             return
         }
         if (busy) {
-            toast("正在处理，请稍候")
+            toast(getString(R.string.camera_translate_t04))
             return
         }
-        busy = true
+        /** 整段翻译进行中（与引擎的逐行翻译不冲突：这是独立的一条请求） */
+        wholeBusy = true
         btnShutter.isEnabled = false
         resultCard.visibility = View.VISIBLE
         progress.visibility = View.VISIBLE
         tvSource.visibility = View.VISIBLE
         tvSource.text = text
         tvResult.text = ""
-        tvStatus.text = "整段翻译中（一次请求，带上下文）…"
+        tvStatus.text = getString(R.string.camera_translate_t01)
 
         lifecycleScope.launch {
             val engineKey = App.prefs.engine
             val result = withContext(Dispatchers.IO) {
-                TranslatorFactory.current().translate(text, App.prefs.targetLang)
+                TranslatorFactory.current().translate(text, App.prefs.targetLang, App.prefs.sourceLang)
             }
             progress.visibility = View.GONE
-            busy = false
+            wholeBusy = false
             btnShutter.isEnabled = true
 
             result.fold(
@@ -557,330 +492,10 @@ class CameraTranslateActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * 缩到最长边不超过 [MAX_OCR_SIDE] 再做 OCR。
-     * ML Kit 对超大图会自己缩，但先缩能省内存——相机出图常有 4000px 级别。
-     */
-    private fun downscale(src: Bitmap, maxSide: Int): Bitmap {
-        val longest = maxOf(src.width, src.height)
-        if (longest <= maxSide) return src
-        val scale = maxSide.toFloat() / longest
-        return runCatching {
-            Bitmap.createScaledBitmap(
-                src,
-                (src.width * scale).toInt().coerceAtLeast(1),
-                (src.height * scale).toInt().coerceAtLeast(1),
-                true
-            )
-        }.getOrDefault(src)
-    }
-
-    // ==================== 位置换算（位图坐标 ↔ 屏幕坐标）====================
-
-    /**
-     * 冻结帧在屏幕上的实际显示矩形。
-     *
-     * 规则与 `PreviewView` 的 `FILL_CENTER` 一致：`scale = max(vw/bw, vh/bh)`，
-     * 然后居中（超出的部分被裁掉）。**必须按 max 而不是 min**——用 min（FIT_CENTER）
-     * 算出来的贴片位置会整体偏移一圈留白，正是 v1.14.0 要消灭的那种错位。
-     */
-    private fun frameTransform(): RectF? {
-        val bmp = frozen ?: return null
-        val vw = root.width.toFloat()
-        val vh = root.height.toFloat()
-        if (vw <= 0f || vh <= 0f || bmp.width <= 0 || bmp.height <= 0) return null
-        val scale = maxOf(vw / bmp.width, vh / bmp.height)
-        val dw = bmp.width * scale
-        val dh = bmp.height * scale
-        val left = (vw - dw) / 2f
-        val top = (vh - dh) / 2f
-        return RectF(left, top, left + dw, top + dh)
-    }
-
-    /** 位图坐标 → 屏幕坐标（贴片定位用） */
-    private fun bitmapRectToView(r: Rect): RectF? {
-        val bmp = frozen ?: return null
-        val f = frameTransform() ?: return null
-        val k = f.width() / bmp.width
-        return RectF(
-            f.left + r.left * k,
-            f.top + r.top * k,
-            f.left + r.right * k,
-            f.top + r.bottom * k
-        )
-    }
-
-    /** 屏幕坐标 → 位图坐标（点选判定用） */
-    private fun viewPointToBitmap(x: Float, y: Float): FloatArray? {
-        val bmp = frozen ?: return null
-        val f = frameTransform() ?: return null
-        val k = f.width() / bmp.width
-        if (k <= 0f) return null
-        return floatArrayOf((x - f.left) / k, (y - f.top) / k)
-    }
-
-    /**
-     * 点选判定：优先"包含该点的最小文字框"（点在字上），
-     * 否则退化为容差 [TAP_TOLERANCE_DP] 内最近的一行（点偏一点点也能用）。
-     */
-    private fun pickLineAt(viewX: Float, viewY: Float): Int? {
-        if (lines.isEmpty()) return null
-        val p = viewPointToBitmap(viewX, viewY) ?: return null
-        val bx = p[0]
-        val by = p[1]
-
-        var best = -1
-        var bestArea = Long.MAX_VALUE
-        lines.forEachIndexed { i, l ->
-            val b = l.box
-            if (bx >= b.left && bx <= b.right && by >= b.top && by <= b.bottom) {
-                val area = b.width().toLong() * b.height().toLong()
-                if (area in 1 until bestArea) {
-                    bestArea = area
-                    best = i
-                }
-            }
-        }
-        if (best >= 0) return best
-
-        val f = frameTransform() ?: return null
-        val bmp = frozen ?: return null
-        val k = f.width() / bmp.width
-        val tol = if (k > 0f) dp(TAP_TOLERANCE_DP) / k else 0f
-
-        var nearest = -1
-        var bestDist = Float.MAX_VALUE
-        lines.forEachIndexed { i, l ->
-            val dx = maxOf(l.box.left - bx, 0f, bx - l.box.right)
-            val dy = maxOf(l.box.top - by, 0f, by - l.box.bottom)
-            val d = hypot(dx, dy)
-            if (d < bestDist) {
-                bestDist = d
-                nearest = i
-            }
-        }
-        return if (nearest >= 0 && bestDist <= tol) nearest else null
-    }
-
-    // ==================== 译文贴片 ====================
-
-    /**
-     * 把译文**盖在原文上**（与谷歌拍照翻译一致：看到的就是译文，不是"旁边多了个气泡"）：
-     * 不透明背景 + 宽高都不小于原文框，背景明暗按原文框周边取样自适应。
-     * 译文更长时向右下自然生长（上限是屏幕内边距）。
-     */
-    private fun showChip(index: Int, translated: String) {
-        val box = lines.getOrNull(index)?.box ?: return
-        val v = bitmapRectToView(box) ?: return
-
-        chips.remove(index)?.let { overlayHost.removeView(it) }
-
-        val density = resources.displayMetrics.density
-        // 原文字高一行的框高 ≈ 字号 × 1.4，反推字号，让译文尽量占满原文框
-        val sizeSp = (v.height() / density * 0.72f).coerceIn(9f, 18f)
-        val lightBackground = isLightAround(box)
-        val bg = if (lightBackground) Color.rgb(250, 250, 250) else Color.rgb(16, 16, 16)
-        val fg = if (lightBackground) Color.rgb(16, 16, 16) else Color.rgb(248, 248, 248)
-
-        val chip = TextView(this).apply {
-            text = translated
-            textSize = sizeSp
-            setTextColor(fg)
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(4), dp(1), dp(4), dp(1))
-            maxLines = 4
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            background = GradientDrawable().apply {
-                cornerRadius = dp(3).toFloat()
-                setColor(bg)
-                setStroke(
-                    dp(1),
-                    if (lightBackground) Color.argb(45, 0, 0, 0) else Color.argb(60, 255, 255, 255)
-                )
-            }
-            // 宽高都不小于原文框 —— 这样原文被真正盖住，不是"贴在旁边"
-            minWidth = v.width().toInt().coerceAtLeast(dp(20))
-            minHeight = v.height().toInt().coerceAtLeast(dp(14))
-            maxWidth = (root.width - v.left - dp(8)).toInt().coerceAtLeast(dp(72))
-            isClickable = false
-            isFocusable = false
-        }
-
-        val lp = FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT,
-            ViewGroup.LayoutParams.WRAP_CONTENT
-        ).apply {
-            leftMargin = v.left.toInt().coerceIn(0, maxOf(0, root.width - dp(72)))
-            topMargin = v.top.toInt().coerceIn(0, maxOf(0, root.height - dp(24)))
-        }
-        overlayHost.addView(chip, lp)
-        chips[index] = chip
-    }
-
-    /**
-     * 原文框周边是浅底还是深底（决定贴片用浅色块还是深色块）。
-     *
-     * 在框内取 6×3 个点算平均亮度即可：块要盖住这一行，只要跟这行的底色接近就不会突兀。
-     * 采样点少是有意的 —— 每多一个点就多一次 `getPixel`，而这是主线程上的渲染路径。
-     */
-    private fun isLightAround(box: Rect): Boolean {
-        val bmp = frozen ?: return false
-        val l = box.left.coerceIn(0, bmp.width - 1)
-        val r = box.right.coerceIn(l + 1, bmp.width)
-        val t = box.top.coerceIn(0, bmp.height - 1)
-        val b = box.bottom.coerceIn(t + 1, bmp.height)
-        val cols = 6
-        val rows = 3
-        var sum = 0.0
-        var n = 0
-        for (i in 0 until cols) {
-            for (j in 0 until rows) {
-                val x = (l + (r - l) * i / cols).coerceIn(0, bmp.width - 1)
-                val y = (t + (b - t) * j / rows).coerceIn(0, bmp.height - 1)
-                val c = runCatching { bmp.getPixel(x, y) }.getOrDefault(Color.BLACK)
-                sum += (0.299 * Color.red(c) + 0.587 * Color.green(c) + 0.114 * Color.blue(c)) / 255.0
-                n++
-            }
-        }
-        return n > 0 && sum / n > 0.55
-    }
-
-    /** 未译行的细框 + 正在翻译的高亮框（点选入口的可视提示） */
-    private inner class LineLayer(ctx: Context) : View(ctx) {
-
-        private val pending = Paint().apply {
-            style = Paint.Style.STROKE
-            strokeWidth = dp(1).toFloat()
-            color = Color.argb(110, 255, 255, 255)
-            isAntiAlias = true
-        }
-        private val hotStroke = Paint().apply {
-            style = Paint.Style.STROKE
-            strokeWidth = dp(2).toFloat()
-            color = Color.argb(235, 120, 200, 255)
-            isAntiAlias = true
-        }
-        private val hotFill = Paint().apply {
-            style = Paint.Style.FILL
-            color = Color.argb(60, 120, 200, 255)
-        }
-
-        private var downX = 0f
-        private var downY = 0f
-        private var downAt = 0L
-
-        /** 「按住看原文」是否已经触发（贴片此刻是隐藏的） */
-        private var peekActive = false
-
-        /** 长按计时器是否已挂上（避免 DOWN 时重复 post） */
-        private var peekScheduled = false
-
-        private val peekRunnable = Runnable { startPeek() }
-
-        init {
-            isClickable = true
-        }
-
-        override fun onTouchEvent(event: MotionEvent): Boolean {
-            when (event.actionMasked) {
-                MotionEvent.ACTION_DOWN -> {
-                    downX = event.x
-                    downY = event.y
-                    downAt = SystemClock.uptimeMillis()
-                    // 冻结帧上：按住一段时间 = 看原文（松手恢复）。取景时没有译文可藏，不挂计时器。
-                    if (frozen != null) {
-                        peekScheduled = true
-                        postDelayed(peekRunnable, PEEK_DELAY_MS)
-                    }
-                    // 按下即给个即时反馈，否则"按住"要等 220ms 才看出反应
-                    invalidate()
-                    return true
-                }
-                MotionEvent.ACTION_MOVE -> {
-                    // 手指移动超过阈值 = 误触/拖动：立刻取消"按住看原文"，避免边滑边闪
-                    if (hypot(event.x - downX, event.y - downY) > dp(12)) cancelPeek()
-                    return true
-                }
-                MotionEvent.ACTION_UP -> {
-                    val wasPeeking = peekActive
-                    cancelPeek()
-                    val moved = hypot(event.x - downX, event.y - downY)
-                    // 轻点才算点选；刚刚是在看原文（长按过）就不当作点选
-                    if (!wasPeeking && moved < dp(12) && SystemClock.uptimeMillis() - downAt < 900) {
-                        onFrameTap(downX, downY)
-                    }
-                    return true
-                }
-                MotionEvent.ACTION_CANCEL -> {
-                    cancelPeek()
-                    return true
-                }
-            }
-            return super.onTouchEvent(event)
-        }
-
-        /** 进入"看原文"：藏掉所有译文贴片，露出底下的原始画面 */
-        private fun startPeek() {
-            peekScheduled = false
-            if (frozen == null || peekActive) return
-            peekActive = true
-            overlayHost.visibility = View.INVISIBLE
-            invalidate()
-            setStatus("按住查看原文 · 松开显示译文")
-        }
-
-        /** 强制退出"看原文"态（重拍 / 重新拍摄前调用），不改状态文案 */
-        fun resetPeek() {
-            if (peekScheduled) {
-                removeCallbacks(peekRunnable)
-                peekScheduled = false
-            }
-            if (!peekActive) return
-            peekActive = false
-            overlayHost.visibility = View.VISIBLE
-            invalidate()
-        }
-
-        /** 退出"看原文"：恢复贴片。未激活时只清理待触发的计时器 */
-        private fun cancelPeek() {
-            if (peekScheduled) {
-                removeCallbacks(peekRunnable)
-                peekScheduled = false
-            }
-            if (!peekActive) return
-            peekActive = false
-            overlayHost.visibility = View.VISIBLE
-            invalidate()
-            setStatus(
-                when {
-                    translations.isNotEmpty() -> "已就地翻译 ${translations.size} 行 · 点其他行可继续 · 按住可看原文"
-                    lines.isNotEmpty() -> "识别到 ${lines.size} 行 · 点一行即可就地翻译 · 按住可看原文"
-                    else -> "点屏幕上的一行字即可就地翻译"
-                }
-            )
-        }
-
-        override fun onDraw(canvas: Canvas) {
-            super.onDraw(canvas)
-            // 看原文时连提示框一起藏掉，画面回归"原图"，方便核对
-            if (peekActive || lines.isEmpty()) return
-            lines.forEachIndexed { i, line ->
-                if (translations.containsKey(i)) return@forEachIndexed
-                val v = bitmapRectToView(line.box) ?: return@forEachIndexed
-                if (inFlight.contains(i)) {
-                    canvas.drawRoundRect(v, dp(4).toFloat(), dp(4).toFloat(), hotFill)
-                    canvas.drawRoundRect(v, dp(4).toFloat(), dp(4).toFloat(), hotStroke)
-                } else {
-                    canvas.drawRoundRect(v, dp(3).toFloat(), dp(3).toFloat(), pending)
-                }
-            }
-        }
-    }
-
     /** 点选：取景时点 = 拍下这一点并只翻那一处；冻结后再点 = 就近翻译那一行 */
     private fun onFrameTap(x: Float, y: Float) {
         if (busy) {
-            toast("正在处理，请稍候")
+            toast(getString(R.string.camera_translate_t04))
             return
         }
         if (frozen == null) {
@@ -888,8 +503,8 @@ class CameraTranslateActivity : AppCompatActivity() {
             takePhoto(x, y)
             return
         }
-        val hit = pickLineAt(x, y) ?: run {
-            toast("这里没识别到文字，点在文字上试试")
+        val hit = ovEngine.pickLineAt(x, y) ?: run {
+            toast(getString(R.string.camera_translate_t09))
             return
         }
         translations[hit]?.let { done ->
@@ -897,6 +512,30 @@ class CameraTranslateActivity : AppCompatActivity() {
             return
         }
         startTranslate(listOf(hit), single = true)
+    }
+
+    /**
+     * 未译行的细框 + 正在翻译的高亮框。
+     *
+     * v1.25.0：长按看原文那套手势抽到了共享基类
+     * （[com.hunter.screentranslator.util.PeekLineLayer]），绘制与几何换算委托给
+     * [ovEngine]。这里只剩"把两者接起来"的胶水。
+     */
+    private inner class LineLayer(ctx: Context) :
+        com.hunter.screentranslator.util.PeekLineLayer(ctx) {
+
+        override fun hasFrame(): Boolean = frozen != null
+
+        override fun onPeekStart() = ovEngine.setPeek(true)
+
+        override fun onPeekEnd() = ovEngine.setPeek(false)
+
+        override fun onTap(x: Float, y: Float) = onFrameTap(x, y)
+
+        override fun onDraw(canvas: Canvas) {
+            super.onDraw(canvas)
+            ovEngine.drawPendingLines(canvas, ovEngine.peekActive)
+        }
     }
 
     // ==================== UI ====================
@@ -1079,7 +718,7 @@ class CameraTranslateActivity : AppCompatActivity() {
                         lastTranslated
                     )
                 } else {
-                    toast("还没有可朗读的内容")
+                    toast(getString(R.string.camera_translate_t07))
                 }
             }
         })
@@ -1115,7 +754,8 @@ class CameraTranslateActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         frozen?.let { runCatching { it.recycle() } }
-        frozen = null
+        // 引擎只持有引用不持有生命周期，这里清掉避免继续引用已 recycle 的位图
+        ovEngine.setFrame(null)
         super.onDestroy()
     }
 

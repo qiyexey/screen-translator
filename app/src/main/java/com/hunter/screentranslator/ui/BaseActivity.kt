@@ -10,9 +10,12 @@ import android.provider.Settings
 import android.util.TypedValue
 import android.view.accessibility.AccessibilityManager
 import android.widget.Toast
+import androidx.annotation.ColorRes
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
+import com.google.android.material.textfield.MaterialAutoCompleteTextView
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
 import com.hunter.screentranslator.service.OverlayService
 
 /**
@@ -46,8 +49,8 @@ abstract class BaseActivity : AppCompatActivity() {
      * 从当前主题解析语义色。
      *
      * 状态文字不能写死颜色：夜间模式下亮绿配深底、纯红配深底都不合 M3 规范，
-     * 而本次 M3 改造的目的就是"颜色走角色"。优先按 M3 属性解析，解析不到
-     * （如自定义的 md_success 不是 M3 标准属性）时退回按颜色资源名取色。
+     * 而本次 M3 改造的目的就是"颜色走角色"。按 M3 属性解析；自定义角色
+     * （`md_success` 这类不是 M3 标准属性的）走 [resColor]。
      */
     protected fun themeColor(attrRes: Int): Int {
         val tv = TypedValue()
@@ -60,14 +63,21 @@ abstract class BaseActivity : AppCompatActivity() {
     }
 
     /**
-     * 按资源名取色（用于 md_success 这类非 M3 标准属性的自定义角色）。
-     * 取不到时回退到默认值 —— getIdentifier 返回 0 时直接 getColor 会抛
-     * Resources.NotFoundException 把 App 打崩，这里必须兜住。
+     * 取自定义语义色（`md_success` / `md_warning` / `bg_primary` 这类非 M3 标准角色）。
+     *
+     * v1.18.0：**参数从"资源名"改成资源 ID**。
+     *
+     * 原来是 `resColor("md_success")`，内部走 `resources.getIdentifier(name, "color", ...)`。
+     * 这在运行时按名字查表，编译期完全看不见 —— 于是 `md_success` / `md_warning` /
+     * `bg_primary` / `bg_card` / `text_primary` / `text_secondary` 这 6 个颜色
+     * 在 XML 里没有任何静态引用。一旦开启 `shrinkResources`（v1.18.0 已开），
+     * 它们会被判定为"无人使用"直接删掉，取色返回 0 → 走到 fallback 的硬编码浅色
+     * → **引导页在深色模式下静默变成浅底浅字**，而且不报任何错。
+     *
+     * 换成资源 ID 后：编译期就能校验存在性，资源收缩也能正确看到引用，
+     * 顺带省掉每次取色的字符串查表开销。
      */
-    protected fun resColor(name: String, fallback: Int = 0xFF006D3B.toInt()): Int {
-        val id = resources.getIdentifier(name, "color", packageName)
-        return if (id != 0) ContextCompat.getColor(this, id) else fallback
-    }
+    protected fun resColor(@ColorRes id: Int): Int = ContextCompat.getColor(this, id)
 
     /**
      * 一键申请忽略电池优化（防 ROM 杀后台导致无障碍掉线）。
@@ -76,7 +86,7 @@ abstract class BaseActivity : AppCompatActivity() {
     protected fun requestIgnoreBatteryOptimizations() {
         val pm = getSystemService(POWER_SERVICE) as PowerManager
         if (pm.isIgnoringBatteryOptimizations(packageName)) {
-            toast("已设置忽略电池优化 ✅")
+            toast(getString(R.string.base_t02))
             return
         }
         runCatching {
@@ -88,11 +98,54 @@ abstract class BaseActivity : AppCompatActivity() {
             )
         }.onFailure {
             runCatching { startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS)) }
-                .onFailure { toast("你的 ROM 不支持自动跳转，请到电池设置里手动添加") }
+                .onFailure { toast(getString(R.string.base_t01)) }
         }
     }
 
     protected fun dp(value: Int): Int = TypedValue.applyDimension(
         TypedValue.COMPLEX_UNIT_DIP, value.toFloat(), resources.displayMetrics
     ).toInt()
+
+    // ==================== M3 下拉框的两个小工具（v1.19.0）====================
+
+    /**
+     * 读「当前选中的是第几项」。
+     *
+     * v1.19.0 把 8 个 android.widget.Spinner 换成了
+     * TextInputLayout(ExposedDropdownMenu) + MaterialAutoCompleteTextView。
+     * 换完之后第一处 API 对不上：Spinner 有 selectedItemPosition，
+     * AutoCompleteTextView 没有对应物（它继承自 EditText，只有"文本选区的起止"）。
+     *
+     * 这里按**文本反查**位置。可靠性来自 ExposedDropdownMenu 的硬性要求：
+     * 子控件必须 inputType="none"，用户没法手打，文本框内容只可能是
+     * 适配器里的某一项（初始化走 [setSel]，点选走 onItemClickListener）。
+     * 找不到就退回 0 —— 和 Spinner 的默认值一致，不会崩。
+     */
+    protected fun selPos(v: MaterialAutoCompleteTextView): Int {
+        val a = v.adapter ?: return 0
+        val text = v.text?.toString().orEmpty()
+        for (i in 0 until a.count) {
+            if (a.getItem(i)?.toString() == text) return i
+        }
+        return 0
+    }
+
+    /**
+     * 选中第 [pos] 项。
+     *
+     * 第二处 API 对不上：Spinner.setSelection(pos) 是"选第几项"，
+     * 而 AutoCompleteTextView.setSelection(pos) 是"把文本光标/选区放到第几个字符"
+     * —— 名字一样、语义完全无关，照搬会得到一个空下拉。
+     * 正确做法是 setText(第 pos 项, false)，第二个参数 false 表示不要触发过滤，
+     * 否则适配器会按新文本过滤，下拉里只剩一项。
+     *
+     * 越界统一钳制：Spinner 会静默忽略非法下标，这里显式 coerceIn，
+     * 避免调用方漏掉 coerceAtLeast 时抛 IndexOutOfBounds。
+     */
+    protected fun setSel(v: MaterialAutoCompleteTextView, pos: Int) {
+        val a = v.adapter ?: return
+        if (a.count == 0) return
+        val p = pos.coerceIn(0, a.count - 1)
+        v.setText(a.getItem(p).toString(), false)
+    }
 }

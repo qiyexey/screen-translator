@@ -1,19 +1,18 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  首页（v1.15.24 向 Google 翻译靠拢）。
+  首页（v1.21.0 视觉与信息架构重构）
 
-  刻意对齐的三处"辨识度"：
-  · 深色配色 #202124 底 / #303134 卡片 / #8AB4F8 蓝（Google 深色主题的原色）
-  · **语言对那一行**（自动检测 ⇄ 中文），中间一个圆形交换键
-  · **大圆角输入卡片**作为首屏主角，功能图标收进卡片内
-  底部一行四个功能键，模仿 Google 的底部导航观感（真实导航栏需要 fragment 结构，
-  这里是同一排的入口按钮，不做假的选中态 —— 那会误导）。
+  设计原则：
+  1. 高频操作就在首页：语言、翻译引擎、文字/图片/拍照/语音入口不再藏进设置。
+  2. 只保留一个视觉主角：输入翻译卡；实时屏幕翻译作为品牌功能使用强调色卡片。
+  3. 所有可点击控件至少 48dp，图标与文字并用，不再靠裸 emoji 或很小的点击热区。
+  4. 权限是“运行状态”，不是普通设置，因此放在首页底部按需修复。
 -->
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_primary"
+    android:background="?attr/colorSurface"
     android:fillViewport="true">
 
     <LinearLayout
@@ -21,14 +20,14 @@
         android:layout_height="wrap_content"
         android:orientation="vertical"
         android:paddingStart="20dp"
+        android:paddingTop="16dp"
         android:paddingEnd="20dp"
-        android:paddingTop="24dp"
-        android:paddingBottom="20dp">
+        android:paddingBottom="24dp">
 
-        <!-- ============ 顶栏 ============ -->
+        <!-- 顶栏：标题是唯一主视觉；两个图标按钮保持 48dp 点击区 -->
         <LinearLayout
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
+            android:layout_height="56dp"
             android:gravity="center_vertical"
             android:orientation="horizontal">
 
@@ -36,178 +35,331 @@
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
-                android:text="屏幕翻译"
-                android:textColor="@color/text_primary"
-                android:textSize="24sp"
+                android:text="@string/main_t01"
+                android:textColor="?attr/colorOnSurface"
+                android:textSize="26sp"
                 android:textStyle="bold" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnHistory"
-                style="@style/Widget.ScreenTranslator.Button.Text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="翻译历史"
-                android:minWidth="0dp"
+                style="@style/Widget.ScreenTranslator.Button.Icon"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/main_btn_history_content_description"
                 android:text=""
                 app:icon="@drawable/ic_history"
                 app:iconGravity="textStart"
                 app:iconPadding="0dp"
-                app:iconSize="22dp" />
+                app:iconSize="23dp" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnSettings"
-                style="@style/Widget.ScreenTranslator.Button.Text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:contentDescription="设置"
-                android:minWidth="0dp"
+                style="@style/Widget.ScreenTranslator.Button.Icon"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:contentDescription="@string/common_btn_settings_content_description"
                 android:text=""
                 app:icon="@drawable/ic_settings"
                 app:iconGravity="textStart"
                 app:iconPadding="0dp"
-                app:iconSize="22dp" />
+                app:iconSize="23dp" />
         </LinearLayout>
 
-        <!-- ============ 语言对（Google 的标志性一行） ============ -->
-        <LinearLayout
+        <!-- 当前引擎：最常改的全局选项前移到首页，不再要求先进入设置索引页 -->
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnEngineQuick"
+            style="@style/Widget.ScreenTranslator.Button.Outlined"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical|start"
+            android:text="@string/main_engine_label"
+            android:textAllCaps="false"
+            android:textColor="?attr/colorOnSurface"
+            app:icon="@drawable/ic_translate"
+            app:iconGravity="textStart"
+            app:iconPadding="10dp"
+            app:iconSize="20dp"
+            app:strokeColor="?attr/colorOutlineVariant" />
+
+        <!-- 语言对：高频操作，以一个完整的圆角容器表达“这是同一组” -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.ScreenTranslator.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
 
-            <TextView
-                android:id="@+id/tvSrcLang"
-                android:layout_width="0dp"
+            <LinearLayout
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="自动检测"
-                android:textColor="@color/accent"
-                android:textSize="14sp" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="4dp">
 
-            <TextView
-                android:id="@+id/btnSwapLang"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:paddingHorizontal="14dp"
-                android:paddingVertical="6dp"
-                android:text="⇄"
-                android:textColor="@color/text_secondary"
-                android:textSize="18sp" />
+                <!-- MaterialAutoCompleteTextView 必须有 TextInputLayout 祖先；见 themes.xml -->
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.ScreenTranslator.DropdownLayout.Borderless"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
 
-            <TextView
-                android:id="@+id/tvTargetLang"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="end"
-                android:text="中文（简体）"
-                android:textColor="@color/accent"
-                android:textSize="14sp" />
-        </LinearLayout>
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/tvSrcLang"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="start|center_vertical"
+                        android:inputType="none"
+                        android:minHeight="52dp"
+                        android:paddingHorizontal="4dp"
+                        android:text="@string/main_tv_src_lang"
+                        android:textColor="?attr/colorPrimary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </com.google.android.material.textfield.TextInputLayout>
 
-        <View
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnSwapLang"
+                    style="@style/Widget.ScreenTranslator.Button.Icon"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:contentDescription="@string/main_swap_language_content_description"
+                    android:text="⇄"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="20sp" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.ScreenTranslator.DropdownLayout.Borderless"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/tvTargetLang"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="end|center_vertical"
+                        android:inputType="none"
+                        android:minHeight="52dp"
+                        android:paddingHorizontal="4dp"
+                        android:text="@string/main_tv_target_lang"
+                        android:textColor="?attr/colorPrimary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            style="@style/TextAppearance.ScreenTranslator.Label"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:layout_marginStart="4dp"
+            android:text="@string/main_section_quick"
+            android:textAllCaps="false" />
+
+        <!-- 输入翻译：首屏主操作。次级入口用带文字的 48dp 按钮，不再只放小图标。 -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.ScreenTranslator.Card"
             android:layout_width="match_parent"
-            android:layout_height="1dp"
-            android:layout_marginTop="10dp"
-            android:background="@color/divider" />
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainer">
 
-        <!-- ============ 输入卡片（首屏主角） ============ -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="12dp">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnInputTranslate"
+                    style="@style/Widget.ScreenTranslator.Button.Text"
+                    android:layout_width="match_parent"
+                    android:layout_height="92dp"
+                    android:gravity="top|start"
+                    android:paddingStart="12dp"
+                    android:paddingTop="14dp"
+                    android:text="@string/main_btn_input_translate"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="18sp"
+                    app:icon="@drawable/ic_edit"
+                    app:iconGravity="textStart"
+                    app:iconPadding="10dp"
+                    app:iconSize="22dp" />
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnImageTranslate"
+                        style="@style/Widget.ScreenTranslator.Button.Text"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:contentDescription="@string/main_btn_image_translate_content_description"
+                        android:text="@string/main_quick_image"
+                        android:textColor="?attr/colorPrimary"
+                        app:icon="@drawable/ic_image"
+                        app:iconGravity="textStart"
+                        app:iconPadding="6dp"
+                        app:iconSize="20dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnCameraTranslate"
+                        style="@style/Widget.ScreenTranslator.Button.Text"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:contentDescription="@string/main_btn_camera_translate_content_description"
+                        android:text="@string/main_quick_camera"
+                        android:textColor="?attr/colorPrimary"
+                        app:icon="@drawable/ic_camera"
+                        app:iconGravity="textStart"
+                        app:iconPadding="6dp"
+                        app:iconSize="20dp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnVoiceTranslate"
+                        style="@style/Widget.ScreenTranslator.Button.Text"
+                        android:layout_width="0dp"
+                        android:layout_height="48dp"
+                        android:layout_weight="1"
+                        android:contentDescription="@string/main_btn_voice_translate_content_description"
+                        android:text="@string/main_quick_voice"
+                        android:textColor="?attr/colorPrimary"
+                        app:icon="@drawable/ic_mic"
+                        app:iconGravity="textStart"
+                        app:iconPadding="6dp"
+                        app:iconSize="20dp" />
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 产品核心能力：用 PrimaryContainer 建立明确的视觉重心 -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            app:cardBackgroundColor="@color/bg_card"
-            app:cardCornerRadius="20dp"
+            android:layout_marginTop="14dp"
+            app:cardBackgroundColor="?attr/colorPrimaryContainer"
+            app:cardCornerRadius="@dimen/md_corner_lg"
             app:cardElevation="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:paddingStart="8dp"
-                android:paddingEnd="8dp"
-                android:paddingTop="8dp"
-                android:paddingBottom="8dp">
+                android:padding="18dp">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnInputTranslate"
-                    style="@style/Widget.ScreenTranslator.Button.Text"
-                    android:layout_width="match_parent"
-                    android:layout_height="96dp"
-                    android:gravity="top|start"
-                    android:paddingStart="16dp"
-                    android:paddingTop="16dp"
-                    android:text="输入或粘贴文字"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="17sp"
-                    app:icon="@drawable/ic_edit"
-                    app:iconGravity="textStart"
-                    app:iconPadding="10dp"
-                    app:iconSize="20dp" />
+                <TextView
+                    style="@style/TextAppearance.ScreenTranslator.Label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/main_live_badge"
+                    android:textColor="?attr/colorOnPrimaryContainer"
+                    android:textStyle="bold" />
 
-                <!-- 功能图标收进卡片内（对齐 Google 把相机/麦克风放在输入框里的做法） -->
-                <LinearLayout
+                <TextView
+                    style="@style/TextAppearance.ScreenTranslator.Title"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="5dp"
+                    android:text="@string/main_live_title"
+                    android:textColor="?attr/colorOnPrimaryContainer" />
+
+                <TextView
+                    style="@style/TextAppearance.ScreenTranslator.Body"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="end"
-                    android:orientation="horizontal"
-                    android:paddingStart="8dp"
-                    android:paddingEnd="8dp"
-                    android:paddingBottom="4dp">
+                    android:layout_marginTop="6dp"
+                    android:lineSpacingExtra="2dp"
+                    android:text="@string/main_live_desc"
+                    android:textColor="?attr/colorOnPrimaryContainer" />
 
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnImageTranslate"
-                        style="@style/Widget.ScreenTranslator.Button.Text"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:contentDescription="图片翻译"
-                        android:minWidth="0dp"
-                        android:text=""
-                        app:icon="@drawable/ic_image"
-                        app:iconGravity="textStart"
-                        app:iconPadding="0dp"
-                        app:iconSize="22dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnCameraTranslate"
-                        style="@style/Widget.ScreenTranslator.Button.Text"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:contentDescription="拍照翻译"
-                        android:minWidth="0dp"
-                        android:text=""
-                        app:icon="@drawable/ic_camera"
-                        app:iconGravity="textStart"
-                        app:iconPadding="0dp"
-                        app:iconSize="22dp" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnVoiceTranslate"
-                        style="@style/Widget.ScreenTranslator.Button.Text"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:contentDescription="语音翻译"
-                        android:minWidth="0dp"
-                        android:text=""
-                        app:icon="@drawable/ic_mic"
-                        app:iconGravity="textStart"
-                        app:iconPadding="0dp"
-                        app:iconSize="22dp" />
-                </LinearLayout>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnLiveTranslate"
+                    style="@style/Widget.ScreenTranslator.Button.Filled"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="14dp"
+                    android:text="@string/main_live_action"
+                    app:icon="@drawable/ic_image"
+                    app:iconGravity="textStart"
+                    app:iconPadding="8dp"
+                    app:iconSize="20dp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- ============ 本 App 的独有能力：实时屏幕翻译 ============ -->
+        <!-- 场景入口：整卡可点，弱于主功能但比旧版 11sp 小按钮更清楚 -->
         <com.google.android.material.card.MaterialCardView
+            android:id="@+id/btnVideoListen"
+            style="@style/Widget.ScreenTranslator.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            app:cardBackgroundColor="@color/bg_card"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="0dp"
-            app:strokeColor="@color/accent"
+            android:layout_marginTop="12dp"
+            android:clickable="true"
+            android:focusable="true"
+            android:foreground="?attr/selectableItemBackground"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="72dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="16dp">
+
+                <ImageView
+                    android:layout_width="42dp"
+                    android:layout_height="42dp"
+                    android:background="@drawable/bg_icon_container"
+                    android:contentDescription="@null"
+                    android:padding="9dp"
+                    android:src="@drawable/ic_headphones" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="14dp"
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/TextAppearance.ScreenTranslator.Subtitle"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/main_video_title"
+                        android:textStyle="bold" />
+
+                    <TextView
+                        style="@style/TextAppearance.ScreenTranslator.Caption"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:text="@string/main_video_desc" />
+                </LinearLayout>
+
+                <ImageView
+                    android:layout_width="24dp"
+                    android:layout_height="24dp"
+                    android:contentDescription="@null"
+                    android:src="@drawable/ic_chevron_right" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- 权限以“运行状态”呈现；用户只有异常时才需要进入完整权限页。 -->
+        <com.google.android.material.card.MaterialCardView
+            style="@style/Widget.ScreenTranslator.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLowest"
+            app:strokeColor="?attr/colorOutlineVariant"
             app:strokeWidth="1dp">
 
             <LinearLayout
@@ -216,104 +368,73 @@
                 android:orientation="vertical"
                 android:padding="16dp">
 
-                <TextView
-                    android:layout_width="wrap_content"
+                <LinearLayout
+                    android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:drawableStart="@drawable/ic_image"
-                    android:drawablePadding="8dp"
-                    android:text="实时屏幕翻译"
-                    android:textColor="@color/text_primary"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <TextView
+                    <ImageView
+                        android:layout_width="22dp"
+                        android:layout_height="22dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_shield" />
+
+                    <TextView
+                        style="@style/TextAppearance.ScreenTranslator.Subtitle"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:layout_weight="1"
+                        android:text="@string/main_permission_title"
+                        android:textStyle="bold" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnPermission"
+                        style="@style/Widget.ScreenTranslator.Button.Text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:text="@string/main_permission_action"
+                        android:textColor="?attr/colorPrimary" />
+                </LinearLayout>
+
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:lineSpacingExtra="2dp"
-                    android:text="游戏 / 模拟器：画面一出新文字就翻，译文贴在画面上。配「必应网页」引擎可走本机 OCR + 免费翻译。"
-                    android:textColor="@color/text_secondary"
-                    android:textSize="11sp" />
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnLiveTranslate"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginTop="12dp"
-                    android:text="打开" />
+                    <TextView
+                        style="@style/TextAppearance.ScreenTranslator.Caption"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/main_accessibility_label" />
+
+                    <TextView
+                        android:id="@+id/tvMainAccessStatus"
+                        style="@style/TextAppearance.ScreenTranslator.Caption"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:text="@string/common_tv_engine_status" />
+
+                    <TextView
+                        style="@style/TextAppearance.ScreenTranslator.Caption"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="18dp"
+                        android:text="@string/main_overlay_label" />
+
+                    <TextView
+                        android:id="@+id/tvMainOverlayStatus"
+                        style="@style/TextAppearance.ScreenTranslator.Caption"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="6dp"
+                        android:text="@string/common_tv_engine_status" />
+                </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
-
-        <!-- ============ 底部功能行（Google 底部导航的观感） ============ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:orientation="horizontal">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnVideoListen"
-                style="@style/Widget.ScreenTranslator.Button.Text"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:minWidth="0dp"
-                android:text="听视频"
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp"
-                app:icon="@drawable/ic_headphones"
-                app:iconGravity="textTop"
-                app:iconPadding="4dp"
-                app:iconSize="22dp" />
-        </LinearLayout>
-
-        <!-- ============ 权限状态：一行小字 ============ -->
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="无障碍 "
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/tvMainAccessStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="检查中…"
-                android:textSize="11sp" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginStart="10dp"
-                android:text="悬浮窗 "
-                android:textColor="@color/text_secondary"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/tvMainOverlayStatus"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="检查中…"
-                android:textSize="11sp" />
-
-            <TextView
-                android:id="@+id/btnPermission"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:gravity="end"
-                android:paddingVertical="8dp"
-                android:text="权限与保活 ›"
-                android:textColor="@color/accent"
-                android:textSize="11sp" />
-        </LinearLayout>
     </LinearLayout>
-</ScrollView>
+</androidx.core.widget.NestedScrollView>

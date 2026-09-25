@@ -21,7 +21,11 @@ class GoogleTranslator(
     private val client: OkHttpClient = HttpClients.standard
 ) : Translator {
 
-    override suspend fun translate(text: String, targetLang: String): Result<String> =
+    override suspend fun translate(
+        text: String,
+        targetLang: String,
+        sourceLang: String
+    ): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 if (text.isBlank()) return@runCatching ""
@@ -32,15 +36,23 @@ class GoogleTranslator(
                 // Google 目标语言代码：中文用 zh-CN，其余直接用代码
                 val target = googleLangCode(targetLang)
 
-                val url = "https://translation.googleapis.com/language/translate/v2".toHttpUrl()
+                val builder = "https://translation.googleapis.com/language/translate/v2".toHttpUrl()
                     .newBuilder()
                     .addQueryParameter("q", text)
                     .addQueryParameter("target", target)
                     .addQueryParameter("format", "text")
                     .addQueryParameter("key", apiKey)
-                    .build()
 
-                val req = Request.Builder().url(url).get().build()
+                // v1.20.0：显式指定源语言时下发 `source`。
+                // 不传该参数时 Google 自己检测，并在响应的 detectedSourceLanguage
+                // 里回报结果（本类目前不解这个字段，也不需要 —— 译文才是有用的）。
+                // 注意 auto 要**整个参数略去**，不能发 source=auto：
+                // v2 没有 auto 这个语言码，会被判成非法语言直接 400。
+                if (sourceLang != SOURCE_AUTO) {
+                    builder.addQueryParameter("source", googleLangCode(sourceLang))
+                }
+
+                val req = Request.Builder().url(builder.build()).get().build()
 
                 client.newCall(req).execute().use { resp ->
                     if (!resp.isSuccessful) {

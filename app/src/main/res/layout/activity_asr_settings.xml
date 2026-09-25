@@ -1,45 +1,39 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_primary"
-    android:fillViewport="true">
+    android:background="?attr/colorSurface"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <!-- M3 TopAppBar（v1.19.0）：替代原来手写的"返回"文字按钮 + 标题 TextView -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topAppBar"
+        style="@style/Widget.ScreenTranslator.Toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp">
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationContentDescription="@string/common_btn_back_content_description"
+        app:title="@string/common_t08" />
 
-        <!-- 返回栏 -->
+    <com.google.android.material.divider.MaterialDivider
+        style="@style/Widget.ScreenTranslator.Divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="6dp">
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="20dp">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnBack"
-                style="@style/Widget.ScreenTranslator.Button.Outlined"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="0dp"
-                android:text="‹ 返回"
-                android:textColor="@color/accent"
-                android:textSize="13sp" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:text="语音识别（听视频用）"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-        </LinearLayout>
         <!-- 语音识别配置卡片（v1.6.0，听视频翻译用） -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
@@ -47,7 +41,7 @@
             android:layout_marginTop="14dp"
             app:cardCornerRadius="@dimen/md_card_radius"
             app:cardElevation="0dp"
-            app:cardBackgroundColor="@color/bg_card">
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -58,8 +52,8 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="语音识别（听视频用）"
-                    android:textColor="@color/text_primary"
+                    android:text="@string/common_t08"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
@@ -68,7 +62,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:hint="API Key（OpenAI 兼容 / Whisper）">
+                    android:hint="@string/asr_settings_t01">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etAsrKey"
@@ -83,7 +77,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:hint="Base URL（默认 api.openai.com/v1，可填中转）">
+                    android:hint="@string/common_t01">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etAsrBaseUrl"
@@ -98,7 +92,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:hint="模型（默认 whisper-1）">
+                    android:hint="@string/asr_settings_t03">
 
                     <com.google.android.material.textfield.TextInputEditText
                         android:id="@+id/etAsrModel"
@@ -112,8 +106,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="听视频翻译的转写引擎，走 OpenAI 兼容的 /v1/audio/transcriptions 接口。支持 OpenAI 官方、中转站、硅基流动（国内直连）等。注意 DeepSeek 没有语音识别接口"
-                    android:textColor="@color/text_secondary"
+                    android:text="@string/asr_settings_t02"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="10sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
@@ -122,8 +116,9 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:text="保存"
+            android:text="@string/common_btn_save"
             android:textSize="14sp" />
 
     </LinearLayout>
-</ScrollView>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

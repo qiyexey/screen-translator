@@ -1,25 +1,28 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Material 3 主题（v1.9.0）
+  Material 3 主题（v1.19.0 界面 M3 化）
 
-  从 Theme.MaterialComponents（M2）升级到 Theme.Material3（M3）。
-  这是本次界面重做的结构性改动 —— M2 主题下：
-  - 组件默认样式偏旧（按钮、开关、输入框都是 M2 观感）
-  - 没有 M3 的语义色角色，夜间模式无法正确工作
-  - 卡片、控件的圆角与高度规范都是 M2 的
+  ============================ 本次做了什么 ============================
 
-  色值全部来自 colors.xml 的 M3 语义角色，主题本身不写死任何颜色。
+  v1.9.0 已经把主题从 M2 升到 M3、也建了语义色角色，但**只有"底子"没有"面子"**：
+  13 个布局里没有一个用 MaterialToolbar，每个页面都手写一条返回栏；
+  13 个 SeekBar、8 个 Spinner 还是 M2 观感的原生控件。
+  本次把主题侧缺的组件样式补齐，布局侧逐个换过去。
+
+  新增：Toolbar / Slider / 下拉菜单 / 图标按钮 / 分隔线 / 排版样式 / 反色表面角色。
+  颜色不在此处写死，全部来自 colors.xml 的 M3 角色。
 -->
 <resources xmlns:tools="http://schemas.android.com/tools">
 
     <style name="Theme.ScreenTranslator" parent="Theme.Material3.Light.NoActionBar">
-        <!-- 主色角色 -->
-        <item name="colorPrimary">@color/accent</item>
-        <item name="colorOnPrimary">#FFFFFF</item>
+        <!-- ==================== 主色角色 ==================== -->
+        <item name="colorPrimary">@color/md_primary</item>
+        <item name="colorOnPrimary">@color/md_on_primary</item>
         <item name="colorPrimaryContainer">@color/md_primary_container</item>
         <item name="colorOnPrimaryContainer">@color/md_on_primary_container</item>
+        <item name="colorPrimaryInverse">@color/md_inverse_primary</item>
 
-        <!-- 次要/第三色 -->
+        <!-- ==================== 次要 / 第三色 ==================== -->
         <item name="colorSecondary">@color/md_secondary</item>
         <item name="colorOnSecondary">@color/md_on_secondary</item>
         <item name="colorSecondaryContainer">@color/md_secondary_container</item>
@@ -29,39 +32,76 @@
         <item name="colorTertiaryContainer">@color/md_tertiary_container</item>
         <item name="colorOnTertiaryContainer">@color/md_on_tertiary_container</item>
 
-        <!-- 错误色 -->
+        <!-- ==================== 错误色 ==================== -->
         <item name="colorError">@color/md_error</item>
         <item name="colorOnError">@color/md_on_error</item>
         <item name="colorErrorContainer">@color/md_error_container</item>
         <item name="colorOnErrorContainer">@color/md_on_error_container</item>
 
-        <!-- 表面与文字（M3 用色调表达层级，因此 surface 家族要齐全） -->
+        <!-- ==================== 表面与文字 ==================== -->
+        <!-- M3 用色调表达层级，因此 surface 家族必须齐全，否则容器色会退化成 surface -->
         <item name="android:colorBackground">@color/md_surface</item>
         <item name="colorOnBackground">@color/md_on_surface</item>
         <item name="colorSurface">@color/md_surface</item>
         <item name="colorOnSurface">@color/md_on_surface</item>
         <item name="colorSurfaceVariant">@color/md_surface_variant</item>
         <item name="colorOnSurfaceVariant">@color/md_on_surface_variant</item>
-        <item name="colorSurfaceInverse">@color/md_on_surface</item>
-        <item name="colorOnSurfaceInverse">@color/md_surface</item>
+        <!--
+          反色表面：Snackbar / Tooltip 用。
+          原来写的是 colorSurfaceInverse=md_on_surface —— 那是「深色文字色」，
+          在浅色主题里恰好能用，但语义错了（拿文字色当表面色）。现在给专属角色。
+        -->
+        <item name="colorSurfaceInverse">@color/md_inverse_surface</item>
+        <item name="colorOnSurfaceInverse">@color/md_inverse_on_surface</item>
         <item name="colorSurfaceContainerLowest">@color/md_surface_container_lowest</item>
         <item name="colorSurfaceContainerLow">@color/md_surface_container_low</item>
         <item name="colorSurfaceContainer">@color/md_surface_container</item>
         <item name="colorSurfaceContainerHigh">@color/md_surface_container_high</item>
         <item name="colorSurfaceContainerHighest">@color/md_surface_container_highest</item>
 
-        <!-- 描边 -->
+        <!-- ==================== 描边 ==================== -->
         <item name="colorOutline">@color/md_outline</item>
         <item name="colorOutlineVariant">@color/md_outline_variant</item>
 
-        <!-- 状态栏跟随主题表面色，避免状态栏与内容割裂 -->
-        <item name="android:statusBarColor">@color/md_surface</item>
-        <item name="android:navigationBarColor">@color/md_surface</item>
-        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+        <!-- ==================== 全局组件样式挂钩 ==================== -->
+        <!--
+          挂到主题上，这样布局里不写 style 的 MaterialToolbar 也自动是 M3 观感。
+
+          v1.20.0 修正：这里原来写的是 `materialToolbarStyle`，**这个属性不存在**。
+          Material 1.12.0 的 attrs.xml 里只有 `toolbarStyle`；`MaterialToolbar`
+          在构造函数里读的也是 `R.attr.toolbarStyle`。
+          `materialToolbarStyle` 是凭空写出来的名字，AAPT2 会直接报
+          「style attribute 'attr/materialToolbarStyle' not found」并中止链接。
+
+          为什么 v1.19.0 没发现：本工程当时从未编译过（无 JDK/SDK），
+          `verify-m3.py` 只做 XML 语法与 id 引用检查，**不做 attr 存在性检查**。
+          现在补上了 build 环境，一次编译就暴露出来了。
+        -->
+        <item name="toolbarStyle">@style/Widget.ScreenTranslator.Toolbar</item>
+
+        <!--
+          v1.18.0：这里原来写死了 statusBarColor / navigationBarColor / windowLightStatusBar。
+
+          升到 targetSdk 35 后，Android 15 强制 edge-to-edge，**前两个属性会被系统直接忽略**；
+          图标明暗也统一由 EdgeToEdge.install() 里的 enableEdgeToEdge() 按深浅模式运行时设置。
+          留在主题里只会造成"改了没效果"的误解，因此删掉，改由代码统一接管。
+
+          这两项保留是有意义的：API 29+ 系统默认会给状态栏/导航栏垫一层半透明 scrim
+          （即使颜色设成透明也会画），会盖住我们延伸上来的 surface 背景。关掉它。
+        -->
+        <item name="android:enforceStatusBarContrast" tools:targetApi="q">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="q">false</item>
     </style>
 
-    <!-- 划词菜单入口用的透明主题 -->
-    <style name="Theme.ScreenTranslator.Transparent" parent="Theme.Material3.Light.NoActionBar">
+    <!--
+      划词菜单入口用的透明主题
+
+      v1.19.0：parent 从 Theme.Material3.Light.NoActionBar 改成 Theme.ScreenTranslator。
+      原来它**不继承**我们的主题，于是既拿不到 M3 语义角色，也拿不到夜间覆盖
+      （values-night 只重定义了 Theme.ScreenTranslator，影响不到这个独立分支）——
+      划词翻译面板在夜间会跑在浅色主题上。
+    -->
+    <style name="Theme.ScreenTranslator.Transparent" parent="Theme.ScreenTranslator">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowNoTitle">true</item>
@@ -69,26 +109,50 @@
         <item name="android:windowIsFloating">false</item>
     </style>
 
-    <!-- ==================== M3 组件样式统一覆写 ==================== -->
+    <!-- ==================================================================
+         组件样式
+         ================================================================== -->
+
+    <!--
+      TopAppBar（v1.19.0 新增）
+
+      之前 12 个布局各自手写一条返回栏：LinearLayout + 一个描边的
+      MaterialButton（文字"返回"）+ 一个 TextView 标题。
+      问题：① 不是 M3 结构，没有 app bar 的高度/内边距规范；
+            ② 返回按钮是文字按钮，白占半个屏幕宽；
+            ③ 标题 18sp bold，与 M3 app bar 的 TitleLarge 不一致。
+
+      现在统一成 MaterialToolbar + navigationIcon（图标返回）。
+      底色用 surface 而非 primary 填充 —— M3 的 app bar 是
+      "surface 底 + onSurface 图标"，不是彩色条。
+    -->
+    <style name="Widget.ScreenTranslator.Toolbar" parent="Widget.Material3.Toolbar">
+        <item name="android:background">?attr/colorSurface</item>
+        <item name="titleTextAppearance">@style/TextAppearance.ScreenTranslator.AppBarTitle</item>
+        <item name="titleCentered">false</item>
+        <item name="navigationIconTint">?attr/colorOnSurface</item>
+        <item name="android:elevation">0dp</item>
+    </style>
+
     <!-- 卡片：M3 规范圆角 12dp，层级用色调而非重阴影 -->
     <style name="Widget.ScreenTranslator.Card" parent="Widget.Material3.CardView.Filled">
         <item name="cardCornerRadius">@dimen/md_card_radius</item>
         <item name="cardElevation">0dp</item>
-        <item name="cardBackgroundColor">@color/md_surface_container_low</item>
+        <item name="cardBackgroundColor">?attr/colorSurfaceContainerLow</item>
         <item name="strokeWidth">0dp</item>
     </style>
 
     <!-- 主按钮：M3 Filled（胶囊形） -->
     <style name="Widget.ScreenTranslator.Button.Filled" parent="Widget.Material3.Button">
-        <item name="android:minHeight">44dp</item>
+        <item name="android:minHeight">@dimen/md_button_height</item>
         <item name="cornerRadius">22dp</item>
     </style>
 
     <!-- 次按钮：M3 Outlined -->
     <style name="Widget.ScreenTranslator.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
-        <item name="android:minHeight">44dp</item>
+        <item name="android:minHeight">@dimen/md_button_height</item>
         <item name="cornerRadius">22dp</item>
-        <item name="strokeColor">@color/md_outline</item>
+        <item name="strokeColor">?attr/colorOutline</item>
     </style>
 
     <!-- 文字按钮 -->
@@ -96,24 +160,253 @@
         <item name="android:minHeight">40dp</item>
     </style>
 
-    <!-- 章节标题：M3 TitleMedium -->
-    <style name="TextAppearance.ScreenTranslator.SectionTitle" parent="TextAppearance.Material3.TitleMedium">
-        <item name="android:textColor">@color/md_on_surface</item>
+    <!--
+      图标按钮（v1.19.0 新增，当前**未被引用**）
+      本来打算给 TopAppBar 的返回键用，实际实现改成了
+      MaterialToolbar 的 app:navigationIcon（Toolbar 自己管导航图标的
+      尺寸/涟漪/着色），用不上这个样式；4 个 ImageButton 也一并并进了
+      TopAppBar，所以现在没有调用点。
+      保留的理由：后续如果出现"卡片里单独放一个图标按钮"这类需求，
+      48dp 最小可点区域 + 圆形涟漪这套约束是现成的。
+      —— 不留的话下次还要重新推一遍 M3 IconButton 的尺寸。
+    -->
+    <style name="Widget.ScreenTranslator.Button.Icon" parent="Widget.Material3.Button.IconButton">
+        <item name="android:minWidth">@dimen/md_touch_target</item>
+        <item name="android:minHeight">@dimen/md_touch_target</item>
+        <item name="iconGravity">textStart</item>
+        <item name="iconPadding">0dp</item>
+        <item name="iconTint">?attr/colorOnSurfaceVariant</item>
     </style>
 
-    <!-- 正文：M3 BodyMedium -->
+    <!--
+      M3 滑杆（v1.19.0 新增）
+      替换 13 个 android.widget.SeekBar —— 那是 M2 时代的控件，
+      轨道是细线 + 小圆点，和 M3 的"粗轨道 + 大圆点 + 数值气泡"完全不同。
+      M3 Slider 拖拽时会浮出数值气泡（label），比 SeekBar 直观得多。
+    -->
+    <style name="Widget.ScreenTranslator.Slider" parent="Widget.Material3.Slider">
+        <item name="labelBehavior">floating</item>
+        <item name="thumbRadius">10dp</item>
+        <item name="trackHeight">4dp</item>
+        <!--
+          stepSize 必须显式给 1。
+          默认 0 = 连续模式，浮点取值会让拖拽气泡显示成 "65.3" 这种小数；
+          而 app 里 13 个滑杆全部是"整数档位 → 真实值"的映射（位置 0..N），
+          给 1 既让气泡显示整数，也顺带在编译期约束了 value 必须是整数。
+          注意：stepSize 一旦非 0，Material 会校验 (value - valueFrom) % stepSize == 0，
+          越界或非整数步长会直接抛 IllegalStateException —— 所以布局里的
+          android:value 与 Kotlin 里的赋值都必须落在 [valueFrom, valueTo] 上。
+        -->
+        <item name="android:stepSize">1</item>
+    </style>
+
+    <!--
+      M3 下拉菜单（v1.19.0 新增）
+      替换 8 个 android.widget.Spinner。
+      M3 的做法是「TextInputLayout(ExposedDropdownMenu) + AutoCompleteTextView」：
+      外观是带描边的选择框 + 右侧展开箭头，而不是 Spinner 那种朴素下拉框。
+    -->
+    <style name="Widget.ScreenTranslator.DropdownLayout" parent="Widget.Material3.TextInputLayout.OutlinedBox.ExposedDropdownMenu">
+        <item name="boxCornerRadiusTopStart">@dimen/md_corner_xs</item>
+        <item name="boxCornerRadiusTopEnd">@dimen/md_corner_xs</item>
+        <item name="boxCornerRadiusBottomStart">@dimen/md_corner_xs</item>
+        <item name="boxCornerRadiusBottomEnd">@dimen/md_corner_xs</item>
+    </style>
+
+    <!--
+      无边框下拉（v1.20.1，主页「自动检测 ⇄ 中文」那一行用）
+
+      ## 为什么必须还是 TextInputLayout
+
+      我一开始为了保住 Google 翻译那种"一行扁平文字"的观感，
+      **直接把 MaterialAutoCompleteTextView 裸放进 LinearLayout、不套 TIL**。
+      结果下拉列表根本弹不出来 —— 反编译 material 1.12.0 的
+      MaterialAutoCompleteTextView 可以看到它有一个
+      `findTextInputLayoutAncestor()`：展开列表、定位弹窗、取
+      ExposedDropdownMenu 样式，全靠找到外层 TextInputLayout。
+      找不到祖先就走不通，点击只会走 AutoCompleteTextView 的默认行为。
+
+      所以结论是：**要下拉，就必须有 TIL**。观感问题改用"把 TIL 画成透明"来解决，
+      而不是"不要 TIL"。
+
+      ## ⚠️ 不能用 boxBackgroundMode=none（v1.20.2 血泪修正）
+
+      上一版这里写的是 `boxBackgroundMode=none` + `boxStrokeWidth=0dp`，
+      想当然地以为"把盒子关掉就是无边框"。结果**首页一 inflate 就崩**：
+
+        FATAL EXCEPTION: main
+        java.lang.RuntimeException: Unable to start activity .../ui.MainActivity:
+          android.view.InflateException: Binary XML file line #102 in layout/activity_main:
+          Error inflating class com.google.android.material.textfield.TextInputLayout
+        Caused by: java.lang.reflect.InvocationTargetException
+        Caused by: java.lang.IllegalStateException:
+          The current box background mode 0 is not supported by the end icon mode 3
+          at EndCompoundLayout.setEndIconMode(EndCompoundLayout.java:377)
+          at TextInputLayout.<init>(TextInputLayout.java:690)
+
+      反编译 material 1.12.0 两个类，机制一清二楚：
+
+        // EndCompoundLayout.setEndIconMode(int mode) —— 构造期就调用
+        if (!delegate.isBoxBackgroundModeSupported(
+                textInputLayout.getBoxBackgroundMode()))
+            throw new IllegalStateException(
+                "The current box background mode " + boxMode
+                    + " is not supported by the end icon mode " + mode);
+
+        // DropdownMenuEndIconDelegate.isBoxBackgroundModeSupported(int mode)
+        return mode != 0;      // 0 = BOX_BACKGROUND_NONE，直接拒绝
+
+      而 `endIconMode=3` 就是 ExposedDropdownMenu 父样式给的
+      `endIconMode=dropdown_menu` —— 也就是下拉箭头。
+      于是"无底色(0)" 与 "下拉箭头(3)" 是**互斥**的，必须在两者里选一个。
+
+      结论：**保下拉箭头，不要用 none**。观感改用"把颜色画成透明"来实现 ——
+      FilledBox 仍然占着那个盒子的位置，但底色和描边都是透明的，
+      在 surface 底上看过去就是一行纯文字。
+    -->
+    <style name="Widget.ScreenTranslator.DropdownLayout.Borderless"
+        parent="Widget.Material3.TextInputLayout.FilledBox.ExposedDropdownMenu">
+        <!--
+          不要写 boxBackgroundMode —— 继承 FilledBox 的 filled(1)，
+          这样 endIconMode=dropdown_menu 才合法（见上方注释）。
+          要让盒子"看不见"，改颜色而不是改模式：
+        -->
+        <item name="boxBackgroundColor">@android:color/transparent</item>
+        <item name="boxStrokeColor">@android:color/transparent</item>
+        <item name="boxStrokeErrorColor">@android:color/transparent</item>
+        <!-- 去掉 FilledBox 顶部那截给浮动 label 预留的留白 -->
+        <item name="boxCollapsedPaddingTop">0dp</item>
+        <!-- 这一行不要浮动标签；文字本身就是当前语言名 -->
+        <item name="hintEnabled">false</item>
+        <!-- 下拉箭头颜色跟正文一致，不要太抢眼 -->
+        <item name="endIconTint">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <!--
+      注意：这里**没有**给内层 MaterialAutoCompleteTextView 配样式。
+      曾经想加一个只改 textSize 的样式，最后决定不加：
+      外层 TextInputLayout 的 ExposedDropdownMenu 样式已经把
+      materialThemeOverlay 指向 ThemeOverlay.Material3.AutoCompleteTextView.OutlinedBox，
+      内层再去覆盖一层样式，等于在两条互相覆盖的路径上做同一件事 ——
+      而本机无法编译预览，出了问题看不出来。
+      所以严格按 Material 文档的写法来：内层只写 android:inputType="none"，
+      文字大小走 M3 默认（BodyLarge）。
+    -->
+
+    <!--
+      M3 分隔线（v1.19.0 新增）
+      布局里原来用手写 <View android:background="@color/divider" height="1dp"/>，
+      MaterialDivider 自带 1dp 高度 + outlineVariant 色 + M3 边距。
+
+      v1.20.0 修正：parent 原来写的是 `Widget.Material3.Divider`，
+      **这个样式名不存在** —— Material 1.12.0 里叫 `Widget.Material3.MaterialDivider`
+      （注意样式名带 "Material" 前缀，控件类才叫 MaterialDivider）。
+      AAPT2 会报「resource style/Widget.Material3.Divider not found」。
+    -->
+    <style name="Widget.ScreenTranslator.Divider" parent="Widget.Material3.MaterialDivider">
+        <!--
+          ⚠️ 这里**不能**写 layout_height，但布局里**必须**写。
+
+          v1.20.0 血的教训：这段注释原来写的是「故意不写 layout_height，
+          MaterialDivider 自己会在 onMeasure 里按 dividerThickness 强制高度，
+          所以让它自己管」—— 这个判断在**时序**上就是错的，直接导致
+          全部 13 个页面的分隔线一 inflate 就崩：
+
+            FATAL EXCEPTION: main
+            android.view.InflateException: Binary XML file line #113 ...
+            Caused by: java.lang.UnsupportedOperationException:
+              You must supply a layout_height attribute.
+              at ViewGroup$LayoutParams.setBaseAttributes
+              at LinearLayout.generateLayoutParams
+              at LayoutInflater.rInflate
+
+          正确的时序是：
+            LayoutInflater 构造 View
+              → 父容器 generateLayoutParams() 构造 LayoutParams
+              → setBaseAttributes() **立刻**读 layout_height
+              → 读不到（-1）就抛 UnsupportedOperationException
+            onMeasure 在这之后很久才跑，MaterialDivider 根本没机会插手。
+
+          所以结论要分成两句：
+            · 放在 <style> 里 —— 没用。父容器走 generateLayoutParams(AttributeSet)
+              那条路径不保证带上 style，写了会「某天突然失效」；
+            · 放在布局里 —— **必须**。这是唯一的正确位置。
+
+          现在 17 处 MaterialDivider 已在各布局里显式写 layout_height="1dp"。
+          本样式只负责颜色。
+        -->
+        <item name="dividerColor">?attr/colorOutlineVariant</item>
+    </style>
+
+    <!-- ==================================================================
+         排版（M3 字阶）
+
+         字号**沿用 app 既有取值**（10/11/12/13/15/18/20sp），只是把它们
+         从"220 处散落的 android:textSize"收敛成命名样式。
+
+         为什么不直接换成 M3 标准字号：本次改动无法编译验证，
+         把 12sp 换成 14sp 会让所有文本重新排版（换行位置、行高、
+         卡片高度全变），风险不可控。结构先 M3 化，字号要调改这里一处即可。
+         ================================================================== -->
+
+    <!-- AppBar 标题：M3 app bar 标题是 TitleLarge(22sp)，这里沿用 20sp -->
+    <style name="TextAppearance.ScreenTranslator.AppBarTitle" parent="TextAppearance.Material3.TitleLarge">
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- 区块大标题（20sp bold） -->
+    <style name="TextAppearance.ScreenTranslator.Headline" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:textSize">20sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <!-- 条目/卡片标题（18sp bold） -->
+    <style name="TextAppearance.ScreenTranslator.Title" parent="TextAppearance.Material3.TitleMedium">
+        <item name="android:textSize">18sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <!-- 次级标题（15sp） -->
+    <style name="TextAppearance.ScreenTranslator.Subtitle" parent="TextAppearance.Material3.TitleSmall">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <!-- 正文（13sp）—— app 里最常用的字号 -->
     <style name="TextAppearance.ScreenTranslator.Body" parent="TextAppearance.Material3.BodyMedium">
-        <item name="android:textColor">@color/md_on_surface</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
     </style>
 
-    <!-- 辅助说明：M3 BodySmall，用 on-surface-variant -->
+    <!-- 大正文（15sp） -->
+    <style name="TextAppearance.ScreenTranslator.BodyLarge" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <!-- 辅助说明（12sp，次要文字色） -->
     <style name="TextAppearance.ScreenTranslator.Caption" parent="TextAppearance.Material3.BodySmall">
-        <item name="android:textColor">@color/md_on_surface_variant</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
     </style>
 
-    <!-- 标签：M3 LabelLarge -->
-    <style name="TextAppearance.ScreenTranslator.Label" parent="TextAppearance.Material3.LabelLarge">
-        <item name="android:textColor">@color/md_on_surface</item>
+    <!-- 标签（11sp） -->
+    <style name="TextAppearance.ScreenTranslator.Label" parent="TextAppearance.Material3.LabelMedium">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
     </style>
+
+    <!-- 微标签（10sp） -->
+    <style name="TextAppearance.ScreenTranslator.LabelSmall" parent="TextAppearance.Material3.LabelSmall">
+        <item name="android:textSize">10sp</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <!-- 兼容：v1.9.0 起就存在的旧样式名，布局里可能有引用，保留并指向新样式 -->
+    <style name="TextAppearance.ScreenTranslator.SectionTitle" parent="TextAppearance.ScreenTranslator.Headline" />
+    <style name="TextAppearance.ScreenTranslator.LabelLarge" parent="TextAppearance.ScreenTranslator.Body" />
 
 </resources>

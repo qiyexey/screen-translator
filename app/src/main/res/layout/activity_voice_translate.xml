@@ -1,64 +1,140 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_primary"
+    android:background="?attr/colorSurface"
     android:orientation="vertical">
 
-    <!-- 顶栏 -->
+    <!-- M3 TopAppBar（v1.19.0）：替代原来手写的"返回"文字按钮 + 标题 TextView -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topAppBar"
+        style="@style/Widget.ScreenTranslator.Toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationContentDescription="@string/common_btn_back_content_description"
+        app:title="@string/voice_translate_t02" />
+
+    <!-- 引擎 / 识别：文字是运行时刷新的，放 app bar 会挤爆标题，下沉为工具栏下方的胶囊按钮行 -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
         android:paddingHorizontal="16dp"
-        android:paddingVertical="12dp">
-
-        <ImageButton
-            android:id="@+id/btnBack"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="返回"
-            android:src="@android:drawable/ic_menu_revert" />
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:text="🎤 语音翻译"
-            android:textColor="@color/text_primary"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+        android:paddingBottom="8dp">
 
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnEngine"
             style="@style/Widget.ScreenTranslator.Button.Outlined"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="引擎：系统"
-            android:textColor="@color/accent"
+            android:text="@string/voice_translate_btn_engine"
+            android:textColor="?attr/colorPrimary"
             android:textSize="11sp"
             android:minWidth="0dp"
             android:paddingHorizontal="10dp" />
 
-        <com.google.android.material.button.MaterialButton
-            android:id="@+id/btnLang"
-            style="@style/Widget.ScreenTranslator.Button.Outlined"
-            android:layout_width="wrap_content"
+        <!--
+          v1.24.0：识别语言下拉框**回来了**，但形态比 v1.20 克制。
+
+          ## 为什么又加回来（一个绕了三圈才认清的事实）
+
+          语音识别引擎**必须知道用什么语言模型解码**：
+
+            · 不下发语言 → 引擎按系统语言硬解。中文系统下说日语会被
+              转成罗马音 `konichiwa`，而不是 `こんにちは`。（v1.23.0 就是这样）
+            · 下发语言   → 引擎用对应语言模型，输出正确字形。
+
+          我们一度以为"指定语言"才是病根（v1.20 会因为选到没包的语种而
+          回 12/13 关会话），但真机对照实验证明：关会话的真正原因是
+          **指到了引擎根本不认的 locale**（典型 `zh-CN`，SODA 只认
+          `cmn-Hans-CN`），而不是"指定了语言"本身。
+
+          也试过 Android 14 的官方多语种检测 API，但它是**离线能力**
+          （引擎日志：`Language detection can't be enabled when
+          EXTRA_PREFER_OFFLINE is false`），本机一个 SODA 语言包都没装，
+          开了检测反而彻底不能用。
+
+          所以结论是：这个选择无法回避，只能把它做得尽量轻 ——
+          默认跟随系统语言、**记忆上次选择**，用户切一次就不用再管。
+
+          宽度用 0dp + weight=1：下拉框文字运行时填充，
+          「中文（简体）」这类标签在窄屏上会把这一行挤换行，
+          撑满剩余宽度则文字自己省略。
+        -->
+        <com.google.android.material.textfield.TextInputLayout
+            style="@style/Widget.ScreenTranslator.DropdownLayout"
+            android:layout_width="0dp"
+            android:layout_weight="1"
             android:layout_height="wrap_content"
-            android:text="识别：英语"
-            android:textColor="@color/accent"
-            android:textSize="11sp"
-            android:minWidth="0dp"
-            android:paddingHorizontal="10dp" />
+            android:layout_marginStart="8dp">
+
+            <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                android:id="@+id/spinnerLang"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="none" />
+        </com.google.android.material.textfield.TextInputLayout>
     </LinearLayout>
 
-    <View
+    <!--
+      v1.22.0：语音引擎状态提示条。
+
+      ## 为什么不再用 AlertDialog 自动弹
+
+      上一版在 onCreate 里发现"系统没有可用听写服务"就自动弹一个 AlertDialog。
+      对话框窗口默认带 FLAG_DIM_BEHIND，**点在它外面的那一下会被系统吃掉用来
+      关闭对话框、不会传给下面的 Activity**。用户看到的后果就是：
+
+        第一次点「开始」→ 只是把弹窗关掉了，什么也没发生
+        第二次点「开始」→ 才真正触发
+
+      —— 也就是"那个按钮也有时能按有时不能"。
+
+      结论：**凡是"还没开始操作就先弹"的提示，都不要用模态对话框**。
+      改成页面上一条常驻提示条：不抢焦点、不吃点击，用户随时可以点「开始」
+      （点了会有 toast + 状态行说明），要处理再点右边的「处理」。
+    -->
+    <LinearLayout
+        android:id="@+id/hintBar"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/divider" />
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:visibility="gone"
+        android:paddingHorizontal="16dp"
+        android:paddingVertical="10dp"
+        android:background="?attr/colorSecondaryContainer">
+
+        <TextView
+            android:id="@+id/tvSpeechHint"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:textColor="?attr/colorOnSecondaryContainer"
+            android:textSize="12sp"
+            android:lineSpacingExtra="2dp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/btnSpeechFix"
+            style="@style/Widget.ScreenTranslator.Button.Text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:minWidth="0dp"
+            android:paddingHorizontal="8dp"
+            android:textColor="?attr/colorOnSecondaryContainer"
+            android:textSize="12sp"
+            android:text="@string/voice_translate_btn_fix" />
+    </LinearLayout>
+
+    <com.google.android.material.divider.MaterialDivider
+        style="@style/Widget.ScreenTranslator.Divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp" />
 
     <!-- 原文（实时听写） -->
     <TextView
@@ -66,8 +142,8 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginTop="12dp"
-        android:text="听到的原文"
-        android:textColor="@color/text_secondary"
+        android:text="@string/voice_translate_t01"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="12sp" />
 
     <TextView
@@ -78,12 +154,12 @@
         android:layout_marginHorizontal="12dp"
         android:layout_marginTop="4dp"
         android:padding="12dp"
-        android:background="@color/bg_card"
+        android:background="?attr/colorSurfaceContainerLow"
         android:gravity="top"
-        android:textColor="@color/text_secondary"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="15sp"
         android:lineSpacingExtra="3dp"
-        android:text="点下方按钮开始，对着手机说话即可\n\n支持连续听写：停顿换气时出译文" />
+        android:text="@string/voice_translate_tv_heard" />
 
     <!-- 译文 -->
     <TextView
@@ -91,11 +167,11 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="16dp"
         android:layout_marginTop="12dp"
-        android:text="译文"
-        android:textColor="@color/text_secondary"
+        android:text="@string/common_t07"
+        android:textColor="?attr/colorOnSurfaceVariant"
         android:textSize="12sp" />
 
-    <ScrollView
+    <androidx.core.widget.NestedScrollView
         android:id="@+id/scrollResult"
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -109,12 +185,12 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:padding="12dp"
-            android:background="@color/bg_card"
-            android:textColor="@color/text_primary"
+            android:background="?attr/colorSurfaceContainerLow"
+            android:textColor="?attr/colorOnSurface"
             android:textSize="17sp"
             android:lineSpacingExtra="4dp"
-            android:text="译文会显示在这里…" />
-    </ScrollView>
+            android:text="@string/common_tv_result" />
+    </androidx.core.widget.NestedScrollView>
 
     <!-- 状态 + 控制按钮 -->
     <LinearLayout
@@ -129,8 +205,8 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="● 待机"
-            android:textColor="@color/text_secondary"
+            android:text="@string/voice_translate_tv_status"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:textSize="13sp" />
 
         <com.google.android.material.button.MaterialButton
@@ -138,6 +214,6 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:minWidth="140dp"
-            android:text="开始聆听" />
+            android:text="@string/voice_translate_btn_toggle" />
     </LinearLayout>
 </LinearLayout>

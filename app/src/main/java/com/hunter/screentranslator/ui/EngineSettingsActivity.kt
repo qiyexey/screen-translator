@@ -6,24 +6,27 @@ import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
 import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
 import com.hunter.screentranslator.api.HyMtDeviceSupport
 import com.hunter.screentranslator.api.HyMtRuntime
 import com.hunter.screentranslator.api.LANG_DISPLAY
+import com.hunter.screentranslator.api.SOURCE_AUTO
 import com.hunter.screentranslator.api.TranslationEngine
 import com.hunter.screentranslator.api.TranslatorFactory
 import com.hunter.screentranslator.databinding.ActivityEngineSettingsBinding
 import com.hunter.screentranslator.service.OverlayService
+import com.hunter.screentranslator.util.CrashLog
+import com.hunter.screentranslator.util.EdgeToEdge
 import com.hunter.screentranslator.util.HyMtModelStatus
 import com.hunter.screentranslator.util.HyMtModelStore
 import com.hunter.screentranslator.util.HyMtProgress
 import com.hunter.screentranslator.util.HyMtQuant
 import com.hunter.screentranslator.util.HyMtSource
+import com.hunter.screentranslator.util.SecretStore
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -52,7 +55,8 @@ class EngineSettingsActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityEngineSettingsBinding.inflate(layoutInflater)
         setContentView(b.root)
-        b.btnBack.setOnClickListener { finish() }
+        EdgeToEdge.install(this)
+        b.topAppBar.setNavigationOnClickListener { finish() }
 
         // ---- 回显所有引擎的已存配置 ----
         b.etApiKey.setText(App.prefs.apiKey)
@@ -79,27 +83,29 @@ class EngineSettingsActivity : BaseActivity() {
 
         // ---- 引擎下拉 ----
         val engines = TranslationEngine.entries.toList()
-        b.spinnerEngine.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item,
-            engines.map { it.displayName }
-        )
+        b.spinnerEngine.setSimpleItems(engines.map { it.displayName }.toTypedArray())
         val currentEngine = TranslationEngine.fromKey(App.prefs.engine)
-        b.spinnerEngine.setSelection(engines.indexOf(currentEngine))
-        b.spinnerEngine.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                applyEngineVisibility(engines[pos])
-            }
-            override fun onNothingSelected(p: AdapterView<*>?) {}
+        setSel(b.spinnerEngine, engines.indexOf(currentEngine))
+        b.spinnerEngine.setOnItemClickListener { _, _, pos, _ ->
+            applyEngineVisibility(engines[pos])
         }
         applyEngineVisibility(currentEngine)
 
+        // ---- 源语言（v1.20.0）----
+        // 列表 = "自动识别（推荐）" + LANG_DISPLAY 的 8 种语言，与 TtsSettingsActivity
+        // 的「原文语言」下拉完全同构（那里也是 auto + 8 语言）。
+        // 用 srcCodes 与 srcLabels 两个等长列表分离"存什么"与"显示什么" ——
+        // 直接把 label 当值存，将来改文案就会把用户的旧设置读成无效值。
+        val srcCodes = listOf(SOURCE_AUTO) + LANG_DISPLAY.keys.toList()
+        val srcLabels = listOf(getString(R.string.engine_settings_t50)) +
+            LANG_DISPLAY.map { "${it.value} (${it.key})" }
+        b.spinnerSource.setSimpleItems(srcLabels.toTypedArray())
+        setSel(b.spinnerSource, srcCodes.indexOf(App.prefs.sourceLang).coerceAtLeast(0))
+
         // ---- 目标语言 ----
         val langCodes = LANG_DISPLAY.keys.toList()
-        b.spinnerTarget.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item,
-            langCodes.map { "${LANG_DISPLAY[it]} ($it)" }
-        )
-        b.spinnerTarget.setSelection(langCodes.indexOf(App.prefs.targetLang).coerceAtLeast(0))
+        b.spinnerTarget.setSimpleItems(langCodes.map { "${LANG_DISPLAY[it]} ($it)" }.toTypedArray())
+        setSel(b.spinnerTarget, langCodes.indexOf(App.prefs.targetLang).coerceAtLeast(0))
 
         b.tvApiKeyHelp.setOnClickListener {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://platform.deepseek.com")))
@@ -108,9 +114,10 @@ class EngineSettingsActivity : BaseActivity() {
         // ---- 只保存本页负责的字段（各子页各自保存）----
         b.btnSave.setOnClickListener {
             saveEngineConfigs()
-            App.prefs.engine = engines[b.spinnerEngine.selectedItemPosition].key
-            App.prefs.targetLang = langCodes[b.spinnerTarget.selectedItemPosition]
-            toast("已保存")
+            App.prefs.engine = engines[selPos(b.spinnerEngine)].key
+            App.prefs.sourceLang = srcCodes[selPos(b.spinnerSource)]
+            App.prefs.targetLang = langCodes[selPos(b.spinnerTarget)]
+            toast(getString(R.string.common_t10))
         }
 
         b.btnTestTranslate.setOnClickListener { testTranslate() }
@@ -122,49 +129,29 @@ class EngineSettingsActivity : BaseActivity() {
     // ================= v1.17.0 本地大模型（腾讯 Hy-MT2-1.8B）=================
 
     private fun setupHyMtUi() {
-        b.spinnerHyMtQuant.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item,
-            HyMtQuant.entries.map { it.displayName }
-        )
-        b.spinnerHyMtSource.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item,
-            HyMtSource.entries.map { it.displayName }
-        )
-        b.spinnerHyMtThreads.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item,
-            hyMtThreadValues.map { if (it == 0) "自动（推荐）" else "$it" }
-        )
-        b.spinnerHyMtContext.adapter = ArrayAdapter(
-            this, android.R.layout.simple_spinner_dropdown_item,
-            hyMtContextValues.map { if (it == 2048) "2048（推荐）" else "$it" }
-        )
+        b.spinnerHyMtQuant.setSimpleItems(HyMtQuant.entries.map { it.displayName }.toTypedArray())
+        b.spinnerHyMtSource.setSimpleItems(HyMtSource.entries.map { it.displayName }.toTypedArray())
+        b.spinnerHyMtThreads.setSimpleItems(hyMtThreadValues.map { if (it == 0) "自动（推荐）" else "$it" }.toTypedArray())
+        b.spinnerHyMtContext.setSimpleItems(hyMtContextValues.map { if (it == 2048) "2048（推荐）" else "$it" }.toTypedArray())
 
-        b.spinnerHyMtQuant.setSelection(
-            HyMtQuant.entries.indexOf(HyMtQuant.fromId(App.prefs.hymtQuant)).coerceAtLeast(0)
-        )
-        b.spinnerHyMtSource.setSelection(
-            HyMtSource.entries.indexOf(HyMtSource.fromId(App.prefs.hymtSource)).coerceAtLeast(0)
-        )
-        b.spinnerHyMtThreads.setSelection(
-            hyMtThreadValues.indexOf(App.prefs.hymtThreads).coerceAtLeast(0)
-        )
-        b.spinnerHyMtContext.setSelection(
-            hyMtContextValues.indexOf(App.prefs.hymtContext).coerceAtLeast(0)
-        )
+        setSel(b.spinnerHyMtQuant, HyMtQuant.entries.indexOf(HyMtQuant.fromId(App.prefs.hymtQuant)).coerceAtLeast(0))
+        setSel(b.spinnerHyMtSource, HyMtSource.entries.indexOf(HyMtSource.fromId(App.prefs.hymtSource)).coerceAtLeast(0))
+        setSel(b.spinnerHyMtThreads, hyMtThreadValues.indexOf(App.prefs.hymtThreads).coerceAtLeast(0))
+        setSel(b.spinnerHyMtContext, hyMtContextValues.indexOf(App.prefs.hymtContext).coerceAtLeast(0))
 
         // 换量化档立即落盘：下载按钮、模型状态、运行时加载都读这个值，
         // 只在「保存」时写会让用户点了下载却下到上一个档。
-        b.spinnerHyMtQuant.onItemSelectedListener = simpleListener { pos ->
+        b.spinnerHyMtQuant.setOnItemClickListener { _, _, pos, _ ->
             App.prefs.hymtQuant = HyMtQuant.entries[pos].id
-            refreshHyMtUi()
+                        refreshHyMtUi()
         }
-        b.spinnerHyMtSource.onItemSelectedListener = simpleListener { pos ->
+        b.spinnerHyMtSource.setOnItemClickListener { _, _, pos, _ ->
             App.prefs.hymtSource = HyMtSource.entries[pos].id
         }
-        b.spinnerHyMtThreads.onItemSelectedListener = simpleListener { pos ->
+        b.spinnerHyMtThreads.setOnItemClickListener { _, _, pos, _ ->
             App.prefs.hymtThreads = hyMtThreadValues[pos]
         }
-        b.spinnerHyMtContext.onItemSelectedListener = simpleListener { pos ->
+        b.spinnerHyMtContext.setOnItemClickListener { _, _, pos, _ ->
             App.prefs.hymtContext = hyMtContextValues[pos]
         }
 
@@ -174,7 +161,7 @@ class EngineSettingsActivity : BaseActivity() {
         b.btnHyMtUnload.setOnClickListener {
             lifecycleScope.launch {
                 HyMtRuntime.unload()
-                toast("已卸载模型，内存已释放")
+                toast(getString(R.string.engine_settings_t41))
                 refreshHyMtUi()
             }
         }
@@ -184,7 +171,7 @@ class EngineSettingsActivity : BaseActivity() {
             val text = buildHyMtDiagnostics()
             val cm = getSystemService(android.content.ClipboardManager::class.java)
             cm?.setPrimaryClip(android.content.ClipData.newPlainText("屏幕翻译诊断", text))
-            toast("诊断信息已复制，可直接发给开发者")
+            toast(getString(R.string.engine_settings_t46))
         }
 
         // 下载在 App 级作用域里跑（退出本页不中断），所以这里的进度条要
@@ -196,11 +183,6 @@ class EngineSettingsActivity : BaseActivity() {
             }
         }
         refreshHyMtUi()
-    }
-
-    private fun simpleListener(onSelected: (Int) -> Unit) = object : AdapterView.OnItemSelectedListener {
-        override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) = onSelected(pos)
-        override fun onNothingSelected(p: AdapterView<*>?) {}
     }
 
     /**
@@ -220,7 +202,7 @@ class EngineSettingsActivity : BaseActivity() {
             HyMtModelStatus.Missing -> "未下载"
         }
         return buildString {
-            append("【屏幕翻译 v1.17.0 诊断】\n")
+            append("【屏幕翻译 v1.18.0 诊断】\n")
             append("设备：").append(HyMtDeviceSupport.summary).append('\n')
             HyMtDeviceSupport.reasonIfUnsupported?.let { append("守卫：").append(it).append('\n') }
             append("量化档：").append(q.displayName).append('\n')
@@ -230,7 +212,34 @@ class EngineSettingsActivity : BaseActivity() {
             HyMtRuntime.lastLatencySummary()?.let { append(it).append('\n') }
             HyMtRuntime.lastBenchSummary?.let { append(it).append('\n') }
             append("模型目录占用：").append(fmtBytes(HyMtModelStore.usedBytes()))
+            append(buildDiagExtras())
         }
+    }
+
+    /**
+     * 诊断信息的"发布工程"补充段（v1.18.0）。
+     *
+     * 原来这段只讲本地大模型。但用户反馈里有一类问题与翻译质量无关，且恰好是
+     * 本次密钥加密改造**引入的新失败模式**，必须能被诊断信息看见，否则只能靠猜：
+     *
+     * - **密钥存储是否降级成明文**：极少数定制 ROM 的 AndroidKeyStore 不可用，
+     *   此时会退回明文写入。这是"如实说明"而不是静默失败 —— 用户应当知道自己
+     *   的密钥当前没有加密。
+     * - **本机有没有崩溃记录**：CrashLog 只写本地、不联网、不上报，
+     *   所以必须由用户主动导出。没有这一段，那份记录永远不会被看到。
+     */
+    private fun buildDiagExtras(): String = buildString {
+        append("\n\n【密钥与崩溃（v1.18.0）】\n")
+        append("密钥存储：")
+        if (SecretStore.unavailable) {
+            append("⚠️ 已降级为明文（AndroidKeyStore 不可用）")
+            SecretStore.lastError?.let { append(" — ").append(it) }
+        } else {
+            append("AndroidKeyStore AES-GCM 正常")
+        }
+        append('\n')
+        append("本地崩溃记录：").append(CrashLog.count()).append(" 条（仅存本机，未上报）")
+        CrashLog.recentReport()?.let { append("\n\n【最近一次崩溃】\n").append(it) }
     }
 
     /**
@@ -258,7 +267,7 @@ class EngineSettingsActivity : BaseActivity() {
             samples.forEachIndexed { i, src ->
                 b.btnHyMtBench.text = "基准中 ${i + 1}/${samples.size}…"
                 val t0 = android.os.SystemClock.elapsedRealtime()
-                val r = translator.translate(src, App.prefs.targetLang)
+                val r = translator.translate(src, App.prefs.targetLang, App.prefs.sourceLang)
                 val dt = android.os.SystemClock.elapsedRealtime() - t0
                 val out = r.getOrNull()
                 if (out != null) {
@@ -271,7 +280,7 @@ class EngineSettingsActivity : BaseActivity() {
                 }
             }
             b.btnHyMtBench.isEnabled = true
-            b.btnHyMtBench.text = "跑一次基准（5 句，结果写进诊断信息）"
+            b.btnHyMtBench.text = getString(R.string.engine_settings_btn_hy_mt_bench)
 
             val warm = times.drop(1)
             val avg = if (warm.isNotEmpty()) warm.sum() / warm.size else 0
@@ -299,10 +308,10 @@ class EngineSettingsActivity : BaseActivity() {
     }
 
     private fun currentHyMtQuant(): HyMtQuant =
-        HyMtQuant.entries.getOrElse(b.spinnerHyMtQuant.selectedItemPosition) { HyMtQuant.Q4_K_M }
+        HyMtQuant.entries.getOrElse(selPos(b.spinnerHyMtQuant)) { HyMtQuant.Q4_K_M }
 
     private fun currentHyMtSource(): HyMtSource =
-        HyMtSource.entries.getOrElse(b.spinnerHyMtSource.selectedItemPosition) { HyMtSource.MODELSCOPE }
+        HyMtSource.entries.getOrElse(selPos(b.spinnerHyMtSource)) { HyMtSource.MODELSCOPE }
 
     private fun refreshHyMtUi() {
         // 先过设备能力守卫：不支持就让整页不可操作并说明原因。
@@ -374,7 +383,7 @@ class EngineSettingsActivity : BaseActivity() {
                 b.progressHyMt.visibility = View.VISIBLE
                 if (phase == HyMtProgress.Phase.VERIFYING) {
                     b.progressHyMt.isIndeterminate = true
-                    b.tvHyMtStatus.text = "下载完成，正在校验 sha256（1GB 约十几秒）…"
+                    b.tvHyMtStatus.text = getString(R.string.engine_settings_t39)
                 } else {
                     b.progressHyMt.isIndeterminate = false
                     b.progressHyMt.progress = if (total > 0) (done * 100 / total).toInt() else 0
@@ -402,7 +411,7 @@ class EngineSettingsActivity : BaseActivity() {
 
     private fun doHyMtImport(uri: Uri) {
         val q = currentHyMtQuant()
-        toast("正在导入…")
+        toast(getString(R.string.engine_settings_t44))
         lifecycleScope.launch {
             val r = HyMtModelStore.importFrom(
                 quant = q,
@@ -435,11 +444,11 @@ class EngineSettingsActivity : BaseActivity() {
 
     private fun preloadHyMt() {
         b.btnHyMtPreload.isEnabled = false
-        b.tvHyMtStatus.text = "正在加载模型到内存…（首次约几秒）"
+        b.tvHyMtStatus.text = getString(R.string.engine_settings_t43)
         lifecycleScope.launch {
             val r = HyMtRuntime.preload()
             r.fold(
-                onSuccess = { toast("模型已加载，可以开始翻译了") },
+                onSuccess = { toast(getString(R.string.engine_settings_t42)) },
                 onFailure = { e -> toast("加载失败：${e.message}") }
             )
             refreshHyMtUi()
@@ -456,7 +465,7 @@ class EngineSettingsActivity : BaseActivity() {
                     HyMtRuntime.unload()
                     HyMtModelStore.delete(q)
                     refreshHyMtUi()
-                    toast("已删除")
+                    toast(getString(R.string.engine_settings_t40))
                 }
             }
             .setNegativeButton("取消", null)
@@ -487,6 +496,10 @@ class EngineSettingsActivity : BaseActivity() {
         b.layoutCaiyun.visibility = if (engine == TranslationEngine.CAIYUN) v else g
         b.layoutBingWeb.visibility = if (engine == TranslationEngine.BING_WEB) v else g
         b.layoutHyMtLocal.visibility = if (engine == TranslationEngine.HYMT_LOCAL) v else g
+        // v1.22.0：必应网页的"免费 / 仅文字 / 随时可能失效"三段说明原本写在
+        // displayName 里，把下拉框和首页胶囊撑爆了；现在名字只写「必应网页版」，
+        // 这三段改由说明行承载 —— 它独占一行、宽度不受限，能写完整句子。
+        b.tvEngineNote.visibility = if (engine == TranslationEngine.BING_WEB) v else g
         if (engine == TranslationEngine.HYMT_LOCAL) refreshHyMtUi()
     }
 
@@ -530,8 +543,8 @@ class EngineSettingsActivity : BaseActivity() {
         // 这里再写一次是为了让「保存」按钮的语义保持一致（本页的所有字段都随保存落盘）。
         App.prefs.hymtQuant = currentHyMtQuant().id
         App.prefs.hymtSource = currentHyMtSource().id
-        App.prefs.hymtThreads = hyMtThreadValues.getOrElse(b.spinnerHyMtThreads.selectedItemPosition) { 0 }
-        App.prefs.hymtContext = hyMtContextValues.getOrElse(b.spinnerHyMtContext.selectedItemPosition) { 2048 }
+        App.prefs.hymtThreads = hyMtThreadValues.getOrElse(selPos(b.spinnerHyMtThreads)) { 0 }
+        App.prefs.hymtContext = hyMtContextValues.getOrElse(selPos(b.spinnerHyMtContext)) { 2048 }
     }
 
     /** 真实调用一次当前引擎的 API 验证配置 */
@@ -570,19 +583,24 @@ class EngineSettingsActivity : BaseActivity() {
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
-            toast("请先授予悬浮窗权限（测试结果会显示在悬浮窗）")
+            toast(getString(R.string.engine_settings_t47))
         }
 
         b.btnTestTranslate.isEnabled = false
-        b.btnTestTranslate.text = "测试中…"
+        b.btnTestTranslate.text = getString(R.string.engine_settings_t45)
 
         lifecycleScope.launch {
+            // v1.20.0：这句测试文案是英文，所以源语言**刻意传 auto 而不是 App.prefs.sourceLang**。
+            // 用户若把源语言设成"日语"，用它去测英文样例会得到一个明显错误的结果，
+            // 从而误判"这个引擎坏了"。测试翻译的目的是验证密钥/网络连通性，
+            // 就该用与源语言无关的固定输入。
             val result = TranslatorFactory.current().translate(
                 "Hello! This is a translation test.",
-                App.prefs.targetLang
+                App.prefs.targetLang,
+                SOURCE_AUTO
             )
             b.btnTestTranslate.isEnabled = true
-            b.btnTestTranslate.text = "测试翻译（真调 API 验证 Key）"
+            b.btnTestTranslate.text = getString(R.string.engine_settings_btn_test_translate)
 
             result.fold(
                 onSuccess = { translated ->

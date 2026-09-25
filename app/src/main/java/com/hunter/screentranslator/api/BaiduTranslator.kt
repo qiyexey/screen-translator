@@ -22,7 +22,11 @@ class BaiduTranslator(
     private val client: OkHttpClient = HttpClients.standard
 ) : Translator {
 
-    override suspend fun translate(text: String, targetLang: String): Result<String> =
+    override suspend fun translate(
+        text: String,
+        targetLang: String,
+        sourceLang: String
+    ): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 if (text.isBlank()) return@runCatching ""
@@ -40,12 +44,23 @@ class BaiduTranslator(
                 val target = BAIDU_LANG[targetLang]
                     ?: throw IllegalArgumentException("百度翻译不支持目标语言：$targetLang")
 
+                // v1.20.0 源语言。百度**承认** from=auto，所以 auto 原样下发即可；
+                // 但显式指定时必须走同一张 BAIDU_LANG 表 —— 直接塞内部码 ja
+                // 会被百度判为非法语言（它要 jp），属于上面那句注释里"透传是根因"
+                // 的同类错误，只是换了个方向。
+                val from = if (sourceLang == SOURCE_AUTO) {
+                    SOURCE_AUTO
+                } else {
+                    BAIDU_LANG[sourceLang]
+                        ?: throw IllegalArgumentException("百度翻译不支持源语言：$sourceLang")
+                }
+
                 val salt = System.currentTimeMillis().toString()
                 val sign = md5(appId + text + salt + key)
 
                 val form = FormBody.Builder()
                     .add("q", text)
-                    .add("from", "auto")
+                    .add("from", from)
                     .add("to", target)
                     .add("appid", appId)
                     .add("salt", salt)

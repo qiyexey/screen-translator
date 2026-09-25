@@ -16,7 +16,11 @@ import androidx.appcompat.app.AlertDialog
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.card.MaterialCardView
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
+import com.hunter.screentranslator.api.EngineReadiness
 import com.hunter.screentranslator.api.TranslationEngine
+import com.hunter.screentranslator.api.engineReadiness
+import com.hunter.screentranslator.util.EdgeToEdge
 import com.hunter.screentranslator.util.HyMtModelStatus
 import com.hunter.screentranslator.util.HyMtModelStore
 import com.hunter.screentranslator.util.HyMtQuant
@@ -61,6 +65,7 @@ class OnboardingActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         steps = buildSteps()
         setContentView(buildUi())
+        EdgeToEdge.install(this)
         render()
     }
 
@@ -130,7 +135,11 @@ class OnboardingActivity : BaseActivity() {
                     "· 智谱 GLM-4-Flash —— 免费调用\n" +
                     "· 百度翻译 —— 每月 5 万字符\n" +
                     "· 彩云小译 —— 新用户 100 万字\n\n" +
-                    "也可以填任意 OpenAI 兼容的中转地址。",
+                    "也可以填任意 OpenAI 兼容的中转地址。\n\n" +
+                    "⚠️ 本 App **不含任何内置密钥**，这一步跳不过去 —— " +
+                    "不配的话，语音翻译会在你说完一整句话之后才提示「未配置 API Key」。\n\n" +
+                    "💡 想零成本试用：把引擎切成「必应网页版」（免费、免密钥），" +
+                    "语音识别用「手机系统」即可。",
             status = Status.ENGINE_KEY,
             actionLabel = "去设置引擎",
             onAction = { act ->
@@ -172,9 +181,9 @@ class OnboardingActivity : BaseActivity() {
     }
 
     private fun renderStatus() {
-        val ok = resColor("md_success")
+        val ok = resColor(R.color.md_success)
         val bad = themeColor(com.google.android.material.R.attr.colorError)
-        val warn = resColor("md_warning")
+        val warn = resColor(R.color.md_warning)
 
         when (steps[index].status) {
             Status.ACCESSIBILITY -> {
@@ -200,37 +209,32 @@ class OnboardingActivity : BaseActivity() {
                 tvStatus.setTextColor(if (on) ok else warn)
             }
             Status.ENGINE_KEY -> {
+                val engine = TranslationEngine.fromKey(App.prefs.engine)
                 val filled = anyEngineKeyFilled()
                 tvStatus.visibility = View.VISIBLE
-                tvStatus.text =
-                    if (filled) "✅ 已配置「${TranslationEngine.fromKey(App.prefs.engine).displayName}」"
-                    else if (TranslationEngine.fromKey(App.prefs.engine) == TranslationEngine.HYMT_LOCAL)
+                tvStatus.text = when {
+                    filled -> "✅ 已配置「${engine.displayName}」"
+                    engine == TranslationEngine.HYMT_LOCAL ->
                         "❌ 本地模型还没下载（设置 → 翻译引擎 → 腾讯 Hy-MT2）"
-                    else "❌ 还没有任何引擎配置了密钥"
+                    else -> "❌ 还不能翻译：${(engineReadiness(engine) { App.prefs.raw(it) } as? EngineReadiness.NotReady)?.reason ?: "还没配置"}"
+                }
                 tvStatus.setTextColor(if (filled) ok else bad)
             }
             Status.NONE -> tvStatus.visibility = View.GONE
         }
     }
 
-    private fun anyEngineKeyFilled(): Boolean = when (TranslationEngine.fromKey(App.prefs.engine)) {
-        TranslationEngine.DEEPSEEK -> App.prefs.apiKey.isNotBlank()
-        TranslationEngine.OPENAI -> App.prefs.openaiApiKey.isNotBlank()
-        TranslationEngine.CLAUDE -> App.prefs.claudeApiKey.isNotBlank()
-        TranslationEngine.QWEN -> App.prefs.qwenApiKey.isNotBlank()
-        TranslationEngine.GLM -> App.prefs.glmApiKey.isNotBlank()
-        TranslationEngine.DOUBAO -> App.prefs.doubaoApiKey.isNotBlank()
-        TranslationEngine.GOOGLE -> App.prefs.googleApiKey.isNotBlank()
-        TranslationEngine.MICROSOFT -> App.prefs.msApiKey.isNotBlank()
-        TranslationEngine.DEEPL -> App.prefs.deeplApiKey.isNotBlank()
-        TranslationEngine.BAIDU -> App.prefs.baiduAppId.isNotBlank()
-        TranslationEngine.CAIYUN -> App.prefs.caiyunToken.isNotBlank()
-        // 免密钥引擎：引导页里也应算"已可翻译"，否则用户选了它还会被提示去填密钥
-        TranslationEngine.BING_WEB -> true
-        // v1.17.0 本地大模型同样免密钥，但判据变成"模型文件是否已就绪" ——
-        // 没有它，用户在引导页会看到"已配置"，点翻译才发现模型根本没下载。
-        TranslationEngine.HYMT_LOCAL ->
-            HyMtModelStore.status(HyMtQuant.fromId(App.prefs.hymtQuant)) is HyMtModelStatus.Ready
+    private fun anyEngineKeyFilled(): Boolean {
+        val engine = TranslationEngine.fromKey(App.prefs.engine)
+        // 本地大模型的判据不是"有没有密钥"（它免密钥），而是"模型文件下没下"。
+        // 没有这一条，用户在引导页会看到"已配置"，点翻译才发现模型根本没下载。
+        if (engine == TranslationEngine.HYMT_LOCAL) {
+            return HyMtModelStore.status(HyMtQuant.fromId(App.prefs.hymtQuant)) is HyMtModelStatus.Ready
+        }
+        // v1.26.0：其余引擎统一走 api 包里的共享判据 —— 原来这里有一份 12 分支的 when，
+        // 语音页还要再写一份。两份迟早漂移（比如新增一个免密钥引擎时只改了一处），
+        // 而漂移的表现是"引导页说配好了、语音页说没配"这种让人无所适从的矛盾。
+        return engineReadiness(engine) { key -> App.prefs.raw(key) } is EngineReadiness.Ready
     }
 
     /** Android 13+ 侧载 APK 的无障碍开关是"受限设置"，先讲清怎么解锁再去 */
@@ -274,12 +278,12 @@ class OnboardingActivity : BaseActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(20), dp(20), dp(20), dp(16))
-            setBackgroundColor(resColor("bg_primary", 0xFFFFFFFF.toInt()))
+            setBackgroundColor(resColor(R.color.bg_primary))
         }
 
         tvStep = TextView(this).apply {
             textSize = 12f
-            setTextColor(resColor("text_secondary", 0xFF757575.toInt()))
+            setTextColor(resColor(R.color.text_secondary))
         }
         root.addView(tvStep)
 
@@ -289,7 +293,7 @@ class OnboardingActivity : BaseActivity() {
             ).apply { topMargin = dp(10) }
             radius = dp(12).toFloat()
             cardElevation = 0f
-            setCardBackgroundColor(resColor("bg_card", 0xFFFFFFFF.toInt()))
+            setCardBackgroundColor(resColor(R.color.bg_card))
         }
 
         val scroll = ScrollView(this).apply {
@@ -307,14 +311,14 @@ class OnboardingActivity : BaseActivity() {
 
         tvTitle = TextView(this).apply {
             textSize = 20f
-            setTextColor(resColor("text_primary", 0xFF212121.toInt()))
+            setTextColor(resColor(R.color.text_primary))
             setPadding(0, dp(10), 0, 0)
         }
         inner.addView(tvTitle)
 
         tvBody = TextView(this).apply {
             textSize = 14f
-            setTextColor(resColor("text_secondary", 0xFF616161.toInt()))
+            setTextColor(resColor(R.color.text_secondary))
             setLineSpacing(dp(4).toFloat(), 1f)
             setPadding(0, dp(12), 0, 0)
         }

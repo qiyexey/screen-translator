@@ -182,7 +182,8 @@ exec /system/bin/sh "$H/tools/gradle-8.7/bin/gradle" \
 
 ## 7. 签名
 
-`build.gradle.kts` 从环境变量或 `local.properties` 读口令：
+`build.gradle.kts` 按 **环境变量 → `keystore.properties` → `local.properties`**
+的顺序读口令（v1.18.0 起加了第二条）：
 
 ```bash
 export SCREEN_TRANSLATOR_STORE_PASSWORD=...
@@ -190,6 +191,24 @@ export SCREEN_TRANSLATOR_KEY_PASSWORD=...
 "$H/run_gradle.sh" assembleRelease
 ```
 
-**没有口令时**：`assembleDebug` 会用自动生成的 `$HOME/.android/debug.keystore` 签名，
+**没有口令时**：`assembleRelease` 会**直接报错中止**（v1.18.0 起）。
+报错信息里带着生成密钥与配置口令的完整命令，照抄即可。
+
+> v1.17.0 的行为是静默改用 Android 调试证书签名。那种包既上不了架，
+> 又因为调试密钥全网公开而可以被同包名的恶意包冒名覆盖安装 ——
+> 所以 v1.18.0 把"悄悄降级"改成了"显式失败"。原因详见 `FIXES-1.18.0.md` §1。
+
+设备上生成密钥（如果 Termux 里有 `keytool`）：
+
+```bash
+keytool -genkeypair -v -keystore release.keystore -alias screentranslator \
+  -keyalg RSA -keysize 4096 -validity 10000 -storetype PKCS12
+```
+
+`assembleDebug` 不受签名检查影响，仍用自动生成的 `$HOME/.android/debug.keystore` 签名，
 产物可安装；但它的签名与正式包（`release.keystore`）**不同**，
-覆盖安装已装的正式版会失败，需要先卸载。想覆盖安装必须用正式口令出 release 包。
+覆盖安装已装的正式版会失败，需要先卸载。
+
+> v1.18.0 起 `assembleRelease` 还会开启 R8 混淆 + 资源收缩，
+> 设备上构建会明显更慢、更吃内存。产物旁边会多一个 `mapping.txt`，
+> **归档保存**，用来还原线上崩溃堆栈。

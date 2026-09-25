@@ -3,45 +3,25 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_primary"
+    android:background="?attr/colorSurface"
     android:orientation="vertical">
 
-    <!-- 顶栏 -->
-    <LinearLayout
+    <!-- M3 TopAppBar（v1.19.0）：替代原来手写的"返回"文字按钮 + 标题 TextView -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topAppBar"
+        style="@style/Widget.ScreenTranslator.Toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical"
-        android:paddingHorizontal="16dp"
-        android:paddingVertical="12dp">
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationContentDescription="@string/common_btn_back_content_description"
+        app:title="@string/common_t03" />
 
-        <ImageButton
-            android:id="@+id/btnBack"
-            android:layout_width="40dp"
-            android:layout_height="40dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="返回"
-            android:src="@android:drawable/ic_menu_revert" />
-
-        <TextView
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:layout_marginStart="8dp"
-            android:drawableStart="@drawable/ic_image"
-            android:drawablePadding="8dp"
-            android:text="实时屏幕翻译"
-            android:textColor="@color/text_primary"
-            android:textSize="18sp"
-            android:textStyle="bold" />
-    </LinearLayout>
-
-    <View
+    <com.google.android.material.divider.MaterialDivider
+        style="@style/Widget.ScreenTranslator.Divider"
         android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:background="@color/divider" />
+        android:layout_height="1dp" />
 
-    <ScrollView
+    <androidx.core.widget.NestedScrollView
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
@@ -57,7 +37,7 @@
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="2dp"
-                app:cardBackgroundColor="@color/bg_card">
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -68,8 +48,8 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="运行状态"
-                        android:textColor="@color/text_primary"
+                        android:text="@string/live_translate_t15"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -78,8 +58,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="未运行"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/live_translate_tv_run_status"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="13sp" />
 
                     <TextView
@@ -87,8 +67,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="检查中…"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/common_tv_engine_status"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="13sp" />
 
                     <com.google.android.material.button.MaterialButton
@@ -97,8 +77,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="切换翻译引擎 / 模型"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/live_translate_btn_engine_settings"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="12sp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -110,7 +90,7 @@
                 android:layout_marginTop="10dp"
                 app:cardCornerRadius="12dp"
                 app:cardElevation="2dp"
-                app:cardBackgroundColor="@color/bg_card">
+                app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -121,8 +101,8 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="翻译区域"
-                        android:textColor="@color/text_primary"
+                        android:text="@string/live_translate_t11"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="15sp"
                         android:textStyle="bold" />
 
@@ -131,8 +111,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="尚未框选"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/live_translate_tv_roi_status"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="13sp" />
 
                     <com.google.android.material.button.MaterialButton
@@ -140,7 +120,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="🔲 框选翻译区域" />
+                        android:text="@string/live_translate_btn_pick_roi" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnOcrTest"
@@ -148,8 +128,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="🔍 OCR 自检（本机能不能认出日文）"
-                        android:textColor="@color/text_secondary" />
+                        android:text="@string/live_translate_btn_ocr_test"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
 
                     <com.google.android.material.button.MaterialButton
                         android:id="@+id/btnDrag"
@@ -157,15 +137,15 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="✋ 拖动调整译文框位置"
-                        android:textColor="@color/text_secondary" />
+                        android:text="@string/live_translate_btn_drag"
+                        android:textColor="?attr/colorOnSurfaceVariant" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="点这里会先退到后台，你在游戏画面上拖出文字框即可。运行中也可以直接从通知栏点「框选区域」，不用切出游戏。"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/live_translate_t09"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="11sp"
                         android:lineSpacingExtra="2dp" />
                 </LinearLayout>
@@ -176,8 +156,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="最近一次送出的图（模型真正看到的）"
-                android:textColor="@color/text_primary"
+                android:text="@string/live_translate_t08"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -187,16 +167,16 @@
                 android:layout_height="150dp"
                 android:layout_marginTop="8dp"
                 android:adjustViewBounds="true"
-                android:background="@color/bg_card"
-                android:contentDescription="最近一次送出的图片"
+                android:background="?attr/colorSurfaceContainerLow"
+                android:contentDescription="@string/live_translate_iv_last_crop_content_description"
                 android:scaleType="fitCenter" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="这张图就是模型真正看到的内容。它里面不是你要翻译的那段文字 → 选区/坐标问题；确实是那段文字但译文对不上 → 模型读错或编造（已在 v1.15.6 收紧提示词）。"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_t16"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="11sp"
                 android:lineSpacingExtra="2dp" />
 
@@ -205,8 +185,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="节奏与省额度"
-                android:textColor="@color/text_primary"
+                android:text="@string/live_translate_t12"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -214,8 +194,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="取帧间隔"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_t03"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
 
             <LinearLayout
@@ -224,12 +204,14 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
-                <SeekBar
+                <com.google.android.material.slider.Slider
                     android:id="@+id/seekInterval"
+                    style="@style/Widget.ScreenTranslator.Slider"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:max="46" />
+                    android:valueFrom="0"
+                    android:valueTo="46" />
 
                 <TextView
                     android:id="@+id/tvIntervalValue"
@@ -238,7 +220,7 @@
                     android:minWidth="56dp"
                     android:gravity="end"
                     android:text="1000ms"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -246,8 +228,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="画面变化阈值（默认 1；换对白时实测 Δ 约 2~5，噪声为 0）"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_t10"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
 
             <LinearLayout
@@ -256,12 +238,14 @@
                 android:orientation="horizontal"
                 android:gravity="center_vertical">
 
-                <SeekBar
+                <com.google.android.material.slider.Slider
                     android:id="@+id/seekDiff"
+                    style="@style/Widget.ScreenTranslator.Slider"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:max="19" />
+                    android:valueFrom="0"
+                    android:valueTo="19" />
 
                 <TextView
                     android:id="@+id/tvDiffValue"
@@ -270,7 +254,7 @@
                     android:minWidth="56dp"
                     android:gravity="end"
                     android:text="8"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -279,16 +263,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:text="译文叠层可触摸（默认关）"
-                android:textColor="@color/text_primary"
+                android:text="@string/live_translate_switch_touchable"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="14sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="默认关：叠层不吃触摸，免得把游戏的操作区变哑。打开后叠层会拦住那一块的点击。"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_t18"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="11sp"
                 android:lineSpacingExtra="2dp" />
 
@@ -297,8 +281,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="译文面板外观"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_t14"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
 
             <LinearLayout
@@ -311,16 +295,18 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minWidth="48dp"
-                    android:text="透明度"
-                    android:textColor="@color/text_primary"
+                    android:text="@string/common_t09"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
 
-                <SeekBar
+                <com.google.android.material.slider.Slider
                     android:id="@+id/seekAlpha"
+                    style="@style/Widget.ScreenTranslator.Slider"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:max="85" />
+                    android:valueFrom="0"
+                    android:valueTo="85" />
 
                 <TextView
                     android:id="@+id/tvAlphaValue"
@@ -329,7 +315,7 @@
                     android:minWidth="56dp"
                     android:gravity="end"
                     android:text="95%"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -343,16 +329,18 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minWidth="48dp"
-                    android:text="宽度"
-                    android:textColor="@color/text_primary"
+                    android:text="@string/live_translate_t05"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
 
-                <SeekBar
+                <com.google.android.material.slider.Slider
                     android:id="@+id/seekPanelW"
+                    style="@style/Widget.ScreenTranslator.Slider"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:max="100" />
+                    android:valueFrom="0"
+                    android:valueTo="100" />
 
                 <TextView
                     android:id="@+id/tvPanelWValue"
@@ -360,8 +348,8 @@
                     android:layout_height="wrap_content"
                     android:minWidth="66dp"
                     android:gravity="end"
-                    android:text="自动"
-                    android:textColor="@color/text_primary"
+                    android:text="@string/live_translate_tv_panel_w_value"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -375,16 +363,18 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minWidth="48dp"
-                    android:text="高度"
-                    android:textColor="@color/text_primary"
+                    android:text="@string/live_translate_t17"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
 
-                <SeekBar
+                <com.google.android.material.slider.Slider
                     android:id="@+id/seekPanelH"
+                    style="@style/Widget.ScreenTranslator.Slider"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:max="40" />
+                    android:valueFrom="0"
+                    android:valueTo="40" />
 
                 <TextView
                     android:id="@+id/tvPanelHValue"
@@ -392,8 +382,8 @@
                     android:layout_height="wrap_content"
                     android:minWidth="66dp"
                     android:gravity="end"
-                    android:text="自动"
-                    android:textColor="@color/text_primary"
+                    android:text="@string/live_translate_tv_panel_w_value"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -407,16 +397,18 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:minWidth="48dp"
-                    android:text="字号"
-                    android:textColor="@color/text_primary"
+                    android:text="@string/live_translate_t04"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
 
-                <SeekBar
+                <com.google.android.material.slider.Slider
                     android:id="@+id/seekTextScale"
+                    style="@style/Widget.ScreenTranslator.Slider"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:max="120" />
+                    android:valueFrom="0"
+                    android:valueTo="120" />
 
                 <TextView
                     android:id="@+id/tvTextScaleValue"
@@ -425,7 +417,7 @@
                     android:minWidth="56dp"
                     android:gravity="end"
                     android:text="1.00×"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -434,16 +426,16 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
-                android:text="原位覆盖原文（会周期性闪烁）"
-                android:textColor="@color/text_primary"
+                android:text="@string/live_translate_switch_cover_mode"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="14sp" />
 
             <TextView
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="默认关：译文贴在选区外侧，不遮挡原文，所以完全不闪。打开后译文会盖在原文上（观感更接近原生汉化），但为了拍到下面的游戏画面，叠层必须周期性隐藏，因此会闪。二选一，按需取舍。"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_t19"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="11sp"
                 android:lineSpacingExtra="2dp" />
 
@@ -452,8 +444,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="12dp"
-                android:text="译文位置微调（叠层和框选位置对不上时用）"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_t13"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp" />
 
             <LinearLayout
@@ -467,15 +459,17 @@
                     android:layout_height="wrap_content"
                     android:minWidth="24dp"
                     android:text="X"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
 
-                <SeekBar
+                <com.google.android.material.slider.Slider
                     android:id="@+id/seekNudgeX"
+                    style="@style/Widget.ScreenTranslator.Slider"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:max="160" />
+                    android:valueFrom="0"
+                    android:valueTo="160" />
 
                 <TextView
                     android:id="@+id/tvNudgeXValue"
@@ -484,7 +478,7 @@
                     android:minWidth="56dp"
                     android:gravity="end"
                     android:text="0dp"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -499,15 +493,17 @@
                     android:layout_height="wrap_content"
                     android:minWidth="24dp"
                     android:text="Y"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
 
-                <SeekBar
+                <com.google.android.material.slider.Slider
                     android:id="@+id/seekNudgeY"
+                    style="@style/Widget.ScreenTranslator.Slider"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:max="160" />
+                    android:valueFrom="0"
+                    android:valueTo="160" />
 
                 <TextView
                     android:id="@+id/tvNudgeYValue"
@@ -516,7 +512,7 @@
                     android:minWidth="56dp"
                     android:gravity="end"
                     android:text="0dp"
-                    android:textColor="@color/text_primary"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="12sp" />
             </LinearLayout>
 
@@ -526,7 +522,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="18dp"
-                android:text="开始实时翻译" />
+                android:text="@string/live_translate_btn_start" />
 
             <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnPause"
@@ -534,8 +530,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="⏸ 暂停"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_btn_pause"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
@@ -544,8 +540,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="⏹ 停止"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_btn_stop"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:visibility="gone" />
 
             <TextView
@@ -554,7 +550,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
                 android:text=""
-                android:textColor="@color/text_secondary"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="11sp" />
 
             <!-- 使用说明（含限制，如实写） -->
@@ -562,8 +558,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
-                android:text="怎么用"
-                android:textColor="@color/text_primary"
+                android:text="@string/live_translate_t07"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -571,8 +567,8 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="1. 先配好一个支持视觉的引擎（DeepSeek / OpenAI / Claude / 通义 / GLM / 豆包）；普通翻译引擎只有文字通道，送不了图。\n\n2. 点「开始实时翻译」→ 系统弹一次屏幕捕获授权（Android 14+ 每次会话都会弹，平台规定，绕不过）。\n\n3. 切到游戏/模拟器，从通知栏点「🔲 框选区域」，在游戏文字框上拖一个框。\n\n4. 之后画面里的文字一变就会被翻译，译文直接压在原文位置上。\n\n5. 从通知栏可暂停 / 停止；「已翻译 N 次」就是当前消耗的请求数。"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_t01"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp"
                 android:lineSpacingExtra="3dp" />
 
@@ -580,8 +576,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="14dp"
-                android:text="已知限制（如实说明）"
-                android:textColor="@color/text_primary"
+                android:text="@string/live_translate_t06"
+                android:textColor="?attr/colorOnSurface"
                 android:textSize="15sp"
                 android:textStyle="bold" />
 
@@ -589,10 +585,10 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
-                android:text="• 视觉模型每轮请求有 1~3 秒延迟，所以剧情、对话、菜单够用，实时比赛里一闪而过的提示会跟不上。\n\n• 每次请求都计费。默认参数下，静止画面不会产生请求；请留意通知里的次数。\n\n• 只能用「支持视觉」的引擎；纯文本引擎会直接报错。\n\n• 屏幕旋转后选区会失效，需要重新框选（会提示）。\n\n• 设为 FLAG_SECURE 的应用（部分银行/流媒体）无法捕获，画面会是黑的。"
-                android:textColor="@color/text_secondary"
+                android:text="@string/live_translate_t02"
+                android:textColor="?attr/colorOnSurfaceVariant"
                 android:textSize="12sp"
                 android:lineSpacingExtra="3dp" />
         </LinearLayout>
-    </ScrollView>
+    </androidx.core.widget.NestedScrollView>
 </LinearLayout>

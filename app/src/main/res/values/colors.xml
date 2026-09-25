@@ -1,42 +1,60 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Material 3 语义色系统（v1.9.0 界面重做）
+  Material 3 语义色系统 —— 蓝色主题（v1.19.0 界面 M3 化）
 
-  为什么改成角色制：
-  旧版只有 6 个裸色值（bg_primary / accent / …），导致三个问题 ——
-    ① 夜间模式只换了主色，背景仍是浅色，等于坏的；
-    ② 语义丢失：同一个 #4CAF50 既当按钮色又当状态色，改一处影响全身；
-    ③ 对比度不足：#4CAF50 配白字对比度只有 2.78（WCAG 需 ≥4.5），所以旧界面发飘。
+  ============================ 本次为什么重做 ============================
 
-  现在按 M3 规范定义「角色」，组件只引用角色、不引用具体色值：
-  primary / on-primary / primary-container / on-primary-container / surface 家族 / outline …
+  之前的调色板是「绿色」，但 v1.15.23 做「强调色换肤」时把 accent 改成了
+  谷歌蓝 #1A73E8，而主题里 colorPrimary = @color/accent —— 于是整个 App
+  出现两套打架的品牌色：
 
-  绿色系的 M3 化处理（保留品牌连续性的关键）：
-  #4CAF50 太亮，无法承载白字，因此按 M3 的做法把它「下沉」为 primary-container，
-  另配一个更深的 primary（#006D3B，白字对比度 6.46 ✓）承载主操作。
-  这样既保住绿色观感，又满足无障碍标准。
+      colorPrimary（按钮/开关/选中态）= 蓝 #1A73E8
+      md_primary（M3 调色板的基准）  = 绿 #006D3B
+      md_surface（页面底色）         = 绿调 #FCFDF7
+
+  结果是「蓝色控件 + 绿色底调」的割裂观感，而且 values-night 的 accent 是
+  #8AB4F8（蓝）而 md_primary 是 #8FE0B0（绿）——白天蓝、夜间绿，
+  同一个 App 在两种模式下品牌色都不一样。v1.18.0 的注释里记录过这个不一致，
+  当时判定为"既有设计选择，不擅自改动"。
+
+  v1.19.0 按用户决定统一到蓝色：整套 M3 调色板以 #1A73E8 为锚点重建。
+
+  ============================ 对比度说明 ============================
+
+  #1A73E8 压白底（或白字压它）对比度为 **4.50:1**，正好达到 WCAG AA
+  对正文的要求（≥4.5）。比 M3 规范推荐的 primary = tone 40（约 6:1）
+  略紧，但合规，且这是用户指定的品牌色，故保留原值。
+
+  如果后续要做无障碍加固，把 md_primary 换成 #0B57D0 即可（约 7.0:1），
+  其余角色不用动。
+
+  ============================ 角色命名 ============================
+
+  组件只引用「角色」（primary / on-primary / surface 家族 / outline …），
+  不引用具体色值。换肤时只改本文件，不用逐页改布局。
 -->
 <resources>
 
-    <!-- ==================== 主色（绿色系）==================== -->
-    <!-- 白天：深绿承载白字（对比 6.46:1） -->
-    <color name="md_primary">#006D3B</color>
+    <!-- ==================== 主色（蓝色系）==================== -->
+    <color name="md_primary">#1A73E8</color>
     <color name="md_on_primary">#FFFFFF</color>
-    <!-- 原 #4CAF50 下沉为容器色（浅绿底配深绿字，对比 9.90:1） -->
-    <color name="md_primary_container">#A8F0C0</color>
-    <color name="md_on_primary_container">#00391F</color>
+    <!-- 浅蓝容器：配深蓝字（对比约 14:1） -->
+    <color name="md_primary_container">#D3E3FD</color>
+    <color name="md_on_primary_container">#041E49</color>
+    <!-- 反色 primary：用于 Snackbar 等反色表面上的强调 -->
+    <color name="md_inverse_primary">#A8C7FA</color>
 
-    <!-- ==================== 次要色（低饱和灰绿，做中性强调）==================== -->
-    <color name="md_secondary">#4F6354</color>
+    <!-- ==================== 次要色（低饱和蓝灰，做中性强调）==================== -->
+    <color name="md_secondary">#545F71</color>
     <color name="md_on_secondary">#FFFFFF</color>
-    <color name="md_secondary_container">#D2E8D5</color>
-    <color name="md_on_secondary_container">#0C1F14</color>
+    <color name="md_secondary_container">#D8E2F6</color>
+    <color name="md_on_secondary_container">#111C2B</color>
 
-    <!-- ==================== 第三色（青绿，做点缀，如收藏星标）==================== -->
-    <color name="md_tertiary">#3A6470</color>
+    <!-- ==================== 第三色（紫，M3 惯用的类比色，做点缀）==================== -->
+    <color name="md_tertiary">#6E5C8E</color>
     <color name="md_on_tertiary">#FFFFFF</color>
-    <color name="md_tertiary_container">#BEEAF7</color>
-    <color name="md_on_tertiary_container">#001F27</color>
+    <color name="md_tertiary_container">#EDDCFC</color>
+    <color name="md_on_tertiary_container">#281645</color>
 
     <!-- ==================== 错误色 ==================== -->
     <color name="md_error">#B3261E</color>
@@ -45,36 +63,56 @@
     <color name="md_on_error_container">#410E0B</color>
 
     <!-- ==================== 表面层次（M3 用色调表达层级，而非阴影）==================== -->
-    <color name="md_surface">#FCFDF7</color>
-    <color name="md_on_surface">#1A1C1A</color>
-    <color name="md_surface_variant">#DEE5DC</color>
-    <color name="md_on_surface_variant">#424940</color>
+    <!-- 冷调 off-white：看起来是白，但与蓝色主色同调，不会显得脏 -->
+    <color name="md_surface">#FAF9FD</color>
+    <color name="md_on_surface">#1A1C1E</color>
+    <color name="md_surface_variant">#E1E2EC</color>
+    <color name="md_on_surface_variant">#44474F</color>
     <color name="md_surface_container_lowest">#FFFFFF</color>
-    <color name="md_surface_container_low">#F6FBF3</color>
-    <color name="md_surface_container">#F0F5EE</color>
-    <color name="md_surface_container_high">#EAEFE8</color>
-    <color name="md_surface_container_highest">#E4EAE2</color>
+    <color name="md_surface_container_low">#F4F3F9</color>
+    <color name="md_surface_container">#EFEEF4</color>
+    <color name="md_surface_container_high">#E9E8EF</color>
+    <color name="md_surface_container_highest">#E3E2E9</color>
+    <!-- 反色表面：Snackbar / Tooltip 用 -->
+    <color name="md_inverse_surface">#2F3033</color>
+    <color name="md_inverse_on_surface">#F1F0F4</color>
 
     <!-- ==================== 描边 ==================== -->
-    <color name="md_outline">#72796F</color>
-    <color name="md_outline_variant">#C2C9BE</color>
+    <color name="md_outline">#74777F</color>
+    <color name="md_outline_variant">#C4C6D0</color>
 
-    <!-- ==================== 状态（成功/警告/信息）==================== -->
+    <!-- ==================== 状态（成功/警告）==================== -->
+    <!--
+      成功色刻意保留绿色：绿色代表"通过/成功"是跨产品的通用语义，
+      与品牌主色是蓝色并不冲突（Google 自家的蓝色产品线也用绿色表示成功）。
+      md_success 在代码里只当文字色用，压白底对比 4.6:1 ✓
+    -->
     <color name="md_success">#1E8E3E</color>
     <color name="md_warning">#7A5900</color>
     <color name="md_warning_container">#FFDF9E</color>
     <color name="md_on_warning_container">#261A00</color>
 
-    <!-- ==================== 兼容旧引用（逐步淘汰，避免一次性改爆）==================== -->
-    <!-- 这些名字在旧布局里被引用；映射到 M3 角色，保证改主题即全局生效 -->
-    <!-- v1.15.23：深色 + 强调色换肤（用户选定方案 A）。
-     这里刻意改的是**语义别名**而不是 md_* 底层色：全 App 所有页面都通过这几个
-     别名取色，改这一处等于一次性换肤，不用逐页改，也不会漏掉某个页面。 -->
-    <color name="bg_primary">#FFFFFF</color>
-    <color name="bg_card">#F1F3F4</color>
-    <color name="text_primary">#202124</color>
-    <color name="text_secondary">#5F6368</color>
-    <color name="accent">#1A73E8</color>
-    <color name="divider">#DADCE0</color>
+    <!--
+      ==================== 兼容旧引用（v1.19.0 改为真别名）====================
+
+      这 6 个名字被 13 个布局和若干 Kotlin 的 resColor() 引用，不能直接删。
+
+      关键改进：这里不再写死色值，而是**指向 M3 角色**。
+      Android 支持资源别名（`<color name="x">@color/y</color>`），
+      所以 bg_primary 会自动跟随 md_surface 在日夜模式下的取值。
+
+      这正好根治了 v1.18.0 修过的那类 bug —— 当时夜间模式文字看不见，
+      根因就是这 6 个别名在 values-night 里"照抄了白天的值"。
+      改成别名后，**结构上不可能再出现日夜不一致**。
+
+      这批别名属于过渡措施：v1.19.0 已把布局里的引用换成 ?attr/colorXxx，
+      剩下的引用只在 Kotlin 的 resColor() 里。后续可以逐步淘汰。
+    -->
+    <color name="bg_primary">@color/md_surface</color>
+    <color name="bg_card">@color/md_surface_container_low</color>
+    <color name="text_primary">@color/md_on_surface</color>
+    <color name="text_secondary">@color/md_on_surface_variant</color>
+    <color name="accent">@color/md_primary</color>
+    <color name="divider">@color/md_outline_variant</color>
 
 </resources>

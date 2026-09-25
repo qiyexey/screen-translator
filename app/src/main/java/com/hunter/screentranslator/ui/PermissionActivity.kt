@@ -8,8 +8,10 @@ import android.os.PowerManager
 import android.provider.Settings
 import androidx.appcompat.app.AlertDialog
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
 import com.hunter.screentranslator.databinding.ActivityPermissionBinding
 import com.hunter.screentranslator.service.OverlayService
+import com.hunter.screentranslator.util.EdgeToEdge
 
 /**
  * v1.12.0 三级页：权限与保活。
@@ -25,7 +27,8 @@ class PermissionActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityPermissionBinding.inflate(layoutInflater)
         setContentView(b.root)
-        b.btnBack.setOnClickListener { finish() }
+        EdgeToEdge.install(this)
+        b.topAppBar.setNavigationOnClickListener { finish() }
 
         b.btnEnableAccessibility.setOnClickListener {
             // Android 13+ 侧载 APK 的无障碍开关是"受限设置"，需要先在应用详情里解锁
@@ -56,7 +59,7 @@ class PermissionActivity : BaseActivity() {
                 startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, uri))
             } else {
                 OverlayService.start(this)
-                toast("悬浮窗已启动")
+                toast(getString(R.string.permission_t06))
             }
         }
 
@@ -70,9 +73,9 @@ class PermissionActivity : BaseActivity() {
     }
 
     private fun updateStatus() {
-        val ok = resColor("md_success")
+        val ok = resColor(R.color.md_success)
         val bad = themeColor(com.google.android.material.R.attr.colorError)
-        val warn = resColor("md_warning")
+        val warn = resColor(R.color.md_warning)
 
         val enabled = isAccessibilityEnabled()
         b.tvAccessibilityStatus.text = if (enabled) "✅ 已开启" else "❌ 未开启"

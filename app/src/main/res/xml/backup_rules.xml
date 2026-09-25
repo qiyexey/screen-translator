@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  备份规则（Android 11 / API 30 及以下）—— v1.18.0 新增。
+
+  背景：清单里 allowBackup="true"，而 v1.17.0 把用户自备的 API Key 明文写在
+  screen_translator.xml 里，且没有任何排除规则 —— 备份通道等于一个密钥出口。
+
+  现在密钥都搬到了独立的 screen_translator_secrets.xml 并做了 AndroidKeyStore
+  加密，这里再把它排除掉，属于"双保险"：
+    · 第一层：密文本身已经解不开（Keystore 密钥不可导出、绑定本机）
+    · 第二层：干脆不让它离开设备
+  其余设置（外观、开关、坐标等）仍然照常备份，换机后不用重配。
+
+  Android 12+ 用 data_extraction_rules.xml，两个文件都要有：
+  系统按 targetSdk / 版本各取所需，只写一个会在另一段版本区间失效。
+-->
+<full-backup-content>
+    <exclude domain="sharedpref" path="screen_translator_secrets.xml" />
+</full-backup-content>

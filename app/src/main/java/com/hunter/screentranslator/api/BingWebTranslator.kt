@@ -61,11 +61,18 @@ class BingWebTranslator : Translator {
 
     @Volatile private var session: Session? = null
 
-    override suspend fun translate(text: String, targetLang: String): Result<String> =
+    override suspend fun translate(
+        text: String,
+        targetLang: String,
+        sourceLang: String
+    ): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 if (text.isBlank()) return@runCatching ""
                 val to = bingLang(targetLang)
+                // v1.20.0：from 位。必应网页端用字符串 "auto-detect" 表示自动，
+                // 显式指定时换成真实语言码（同样走 bingLang，中文必须带 zh-Hans）。
+                val from = if (sourceLang == SOURCE_AUTO) AUTO_DETECT else bingLang(sourceLang)
 
                 // 长文本要分段：网页端单次请求有长度上限，超了会整段失败。
                 // 按行切、每段不超过 CHUNK，避免在句子中间截断。
@@ -73,17 +80,17 @@ class BingWebTranslator : Translator {
                 val out = StringBuilder()
                 for (c in chunks) {
                     if (out.isNotEmpty()) out.append('\n')
-                    out.append(requestOnce(c, to))
+                    out.append(requestOnce(c, to, from))
                 }
                 out.toString()
             }
         }
 
     /** 一次请求；会话失效则丢弃重建后重试一次 */
-    private fun requestOnce(text: String, to: String): String {
+    private fun requestOnce(text: String, to: String, from: String): String {
         val s = session ?: bootstrap().also { session = it }
         return try {
-            post(text, to, s)
+            post(text, to, from, s)
         } catch (e: Exception) {
             // token 与时间戳绑定，过期/风控都会走到这里。重建一次再试，
             // 仍失败就把真实原因抛出去（不吞）。
@@ -91,7 +98,7 @@ class BingWebTranslator : Translator {
             val fresh = bootstrap()
             session = fresh
             try {
-                post(text, to, fresh)
+                post(text, to, from, fresh)
             } catch (e2: Exception) {
                 throw RuntimeException("必应网页端失败：${e2.message ?: e2.javaClass.simpleName}")
             }
@@ -118,9 +125,9 @@ class BingWebTranslator : Translator {
         return Session(ig, iid, m.groupValues[1], m.groupValues[2], System.currentTimeMillis())
     }
 
-    private fun post(text: String, to: String, s: Session): String {
+    private fun post(text: String, to: String, from: String, s: Session): String {
         val body = FormBody.Builder()
-            .add("fromLang", "auto-detect")
+            .add("fromLang", from)
             .add("text", text)
             .add("to", to)
             .add("token", s.token)
@@ -189,5 +196,15 @@ class BingWebTranslator : Translator {
             "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) " +
                 "Chrome/120.0.0.0 Mobile Safari/537.36"
         private const val CHUNK = 900
+
+        /**
+         * 必应网页端表示"自动检测"的字面量。
+         *
+         * 注意它和 [SOURCE_AUTO] 不是同一个值 —— 接口层用 "auto"，而 bing.com
+         * 的表单字段要的是 "auto-detect"。直接透传 "auto" 必应不认，会当成
+         * 未知语言码处理。这类"同一概念在不同上游叫法不同"的偏差，
+         * 正是 v1.20.0 串联源语言时最容易漏掉的一类 bug。
+         */
+        private const val AUTO_DETECT = "auto-detect"
     }
 }

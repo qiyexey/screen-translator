@@ -1,22 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  Material 3 夜间主题（v1.9.0）
+  Material 3 夜间主题（v1.19.0）
 
-  关键修复：旧版这里是 parent="Theme.MaterialComponents..."（M2），
-  而 values/themes.xml 已升级到 M3 —— 夜间主题会**覆盖**白天主题，
-  于是夜间模式实际跑在 M2 上，等于本次升级在夜间失效。现统一为 M3。
+  ============================ 本次修的两个问题 ============================
 
-  颜色不在此处写死：全部由 values-night/colors.xml 的 M3 角色提供，
-  主题只做角色到属性名的映射（与 values/themes.xml 保持一一对应）。
+  ① parent 用错了：这里原来写的是 `Theme.Material3.Light.NoActionBar`（**浅色**）。
+     values-night 是资源限定符，会**整体替换** values 里的同名 style，所以
+     夜间模式下整个 App 跑在浅色主题的基线上 —— `android:isLightTheme` 为 true，
+     依赖该属性的组件（涟漪、部分 drawable 的 auto-mirror、文字反色逻辑）
+     在夜间全部按浅色处理。这是继「别名照抄白天值」「白天蓝夜间绿」之后，
+     第三个日夜不一致的 bug，现在改为 `Dark`。
+
+  ② 组件样式挂钩缺失：values-night 的 style 会整体替换 values 的同名 style，
+     所以 materialToolbarStyle 这类 item 必须在这里重复一遍，否则夜间会丢。
+
+  ============================ 组件样式不用重复 ============================
+
+  Widget.ScreenTranslator.* / TextAppearance.ScreenTranslator.* 这些样式
+  只引用 ?attr/colorXxx 语义角色，不写死颜色，所以**不需要**夜间版本 ——
+  角色值由 values-night/colors.xml 提供，样式自动跟随。
 -->
 <resources xmlns:tools="http://schemas.android.com/tools">
 
-    <style name="Theme.ScreenTranslator" parent="Theme.Material3.Light.NoActionBar">
+    <style name="Theme.ScreenTranslator" parent="Theme.Material3.Dark.NoActionBar">
+        <!-- ==================== 主色角色 ==================== -->
         <item name="colorPrimary">@color/md_primary</item>
         <item name="colorOnPrimary">@color/md_on_primary</item>
         <item name="colorPrimaryContainer">@color/md_primary_container</item>
         <item name="colorOnPrimaryContainer">@color/md_on_primary_container</item>
+        <item name="colorPrimaryInverse">@color/md_inverse_primary</item>
 
+        <!-- ==================== 次要 / 第三色 ==================== -->
         <item name="colorSecondary">@color/md_secondary</item>
         <item name="colorOnSecondary">@color/md_on_secondary</item>
         <item name="colorSecondaryContainer">@color/md_secondary_container</item>
@@ -26,32 +40,45 @@
         <item name="colorTertiaryContainer">@color/md_tertiary_container</item>
         <item name="colorOnTertiaryContainer">@color/md_on_tertiary_container</item>
 
+        <!-- ==================== 错误色 ==================== -->
         <item name="colorError">@color/md_error</item>
         <item name="colorOnError">@color/md_on_error</item>
         <item name="colorErrorContainer">@color/md_error_container</item>
         <item name="colorOnErrorContainer">@color/md_on_error_container</item>
 
+        <!-- ==================== 表面与文字 ==================== -->
         <item name="android:colorBackground">@color/md_surface</item>
         <item name="colorOnBackground">@color/md_on_surface</item>
         <item name="colorSurface">@color/md_surface</item>
         <item name="colorOnSurface">@color/md_on_surface</item>
         <item name="colorSurfaceVariant">@color/md_surface_variant</item>
         <item name="colorOnSurfaceVariant">@color/md_on_surface_variant</item>
-        <item name="colorSurfaceInverse">@color/md_on_surface</item>
-        <item name="colorOnSurfaceInverse">@color/md_surface</item>
+        <item name="colorSurfaceInverse">@color/md_inverse_surface</item>
+        <item name="colorOnSurfaceInverse">@color/md_inverse_on_surface</item>
         <item name="colorSurfaceContainerLowest">@color/md_surface_container_lowest</item>
         <item name="colorSurfaceContainerLow">@color/md_surface_container_low</item>
         <item name="colorSurfaceContainer">@color/md_surface_container</item>
         <item name="colorSurfaceContainerHigh">@color/md_surface_container_high</item>
         <item name="colorSurfaceContainerHighest">@color/md_surface_container_highest</item>
 
+        <!-- ==================== 描边 ==================== -->
         <item name="colorOutline">@color/md_outline</item>
         <item name="colorOutlineVariant">@color/md_outline_variant</item>
 
-        <!-- 夜间：状态栏用深色表面 + 浅色图标（windowLightStatusBar 设 false） -->
-        <item name="android:statusBarColor">@color/md_surface</item>
-        <item name="android:navigationBarColor">@color/md_surface</item>
-        <item name="android:windowLightStatusBar" tools:targetApi="m">true</item>
+        <!-- ==================== 全局组件样式挂钩（必须重复，见文件头 ②）==================== -->
+        <!-- v1.20.0：materialToolbarStyle → toolbarStyle（前者不存在，见 values/themes.xml 注释） -->
+        <item name="toolbarStyle">@style/Widget.ScreenTranslator.Toolbar</item>
+
+        <!--
+          v1.18.0：与 values/themes.xml 保持一致的清理。
+
+          另外这里原本有个**实实在在的 bug**：注释写着"夜间要浅色图标
+          （windowLightStatusBar 设 false）"，代码却写的是 `true` ——
+          即夜间模式下仍然要求状态栏画**深色**图标，配深色状态栏等于看不见。
+          现在这套交给 EdgeToEdge.install() 按深浅模式运行时判定，主题不再参与。
+        -->
+        <item name="android:enforceStatusBarContrast" tools:targetApi="q">false</item>
+        <item name="android:enforceNavigationBarContrast" tools:targetApi="q">false</item>
     </style>
 
 </resources>

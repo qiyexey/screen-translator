@@ -206,7 +206,7 @@ class VideoListenService : Service() {
             Log.i(TAG, "[听视频] 转写：${text.take(60)}")
             view.update(text, "正在翻译…")
 
-            val translated = TranslatorFactory.current().translate(text, App.prefs.targetLang)
+            val translated = TranslatorFactory.current().translate(text, App.prefs.targetLang, App.prefs.sourceLang)
                 .fold(
                     onSuccess = { it },
                     onFailure = { e ->

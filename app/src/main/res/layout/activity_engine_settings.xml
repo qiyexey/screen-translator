@@ -1,52 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_primary"
-    android:fillViewport="true">
+    android:background="?attr/colorSurface"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <!-- M3 TopAppBar（v1.19.0）：替代原来手写的"返回"文字按钮 + 标题 TextView -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topAppBar"
+        style="@style/Widget.ScreenTranslator.Toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp">
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationContentDescription="@string/common_btn_back_content_description"
+        app:title="@string/engine_settings_t35" />
 
-        <!-- 返回栏 -->
+    <com.google.android.material.divider.MaterialDivider
+        style="@style/Widget.ScreenTranslator.Divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="6dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnBack"
-                style="@style/Widget.ScreenTranslator.Button.Outlined"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="0dp"
-                android:text="‹ 返回"
-                android:textColor="@color/accent"
-                android:textSize="13sp" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:text="翻译引擎与密钥"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="20dp">
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:cardCornerRadius="@dimen/md_card_radius"
             app:cardElevation="0dp"
-            app:cardBackgroundColor="@color/bg_card">
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -56,8 +49,8 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="翻译引擎与密钥"
-                    android:textColor="@color/text_primary"
+                    android:text="@string/engine_settings_t35"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="16sp"
                     android:textStyle="bold" />
 
@@ -65,15 +58,42 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="4dp"
-                    android:text="翻译引擎"
-                    android:textColor="@color/text_secondary"
+                    android:text="@string/engine_settings_t34"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="13sp" />
 
-                <Spinner
-                    android:id="@+id/spinnerEngine"
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.ScreenTranslator.DropdownLayout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp" />
+                    android:layout_marginTop="2dp">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/spinnerEngine"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <!--
+                  v1.22.0 引擎说明区：只对需要额外说明的引擎显示。
+
+                  必应网页的显示名已收敛成「必应网页版」—— 原来那串
+                  「必应网页（免费 · 仅文字 · 随时可能失效）」会把首页引擎胶囊按钮
+                  和本页下拉框的回显文字撑到截断。但"它是灰区方案"这件事必须仍然
+                  如实告诉用户，于是把说明从**名字**搬到**说明行**：
+                  名字只回答"这是谁"，说明行有整行宽度可以写完整的句子。
+                -->
+                <TextView
+                    android:id="@+id/tvEngineNote"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="6dp"
+                    android:visibility="gone"
+                    android:text="@string/engine_settings_bing_web_note"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp"
+                    android:lineSpacingExtra="2dp" />
 
                 <!-- ===== DeepSeek 配置区 ===== -->
                 <LinearLayout
@@ -87,8 +107,8 @@
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="没有 API Key？点击前往 platform.deepseek.com 获取"
-                        android:textColor="@color/accent"
+                        android:text="@string/engine_settings_tv_api_key_help"
+                        android:textColor="?attr/colorPrimary"
                         android:textSize="11sp"
                         android:padding="2dp" />
 
@@ -112,7 +132,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="Base URL (默认 https://api.deepseek.com)">
+                        android:hint="@string/engine_settings_t03">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etBaseUrl"
@@ -127,7 +147,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="模型名 (默认 deepseek-chat)">
+                        android:hint="@string/engine_settings_t23">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etModel"
@@ -165,8 +185,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="在 Google Cloud Console 启用 Cloud Translation API 后创建 API Key。注意大陆网络需自备访问条件"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t08"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -183,7 +203,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="Azure 密钥 (Subscription Key)">
+                        android:hint="@string/engine_settings_t01">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etMsKey"
@@ -198,7 +218,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="区域 Region（如 eastasia，global 可留空）">
+                        android:hint="@string/engine_settings_t07">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etMsRegion"
@@ -212,8 +232,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="Azure 门户创建「翻译」资源后获取密钥。每月 200 万字符免费额度"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t02"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -230,7 +250,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="DeepL Auth Key（Free 版以 :fx 结尾）">
+                        android:hint="@string/engine_settings_t04">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etDeeplKey"
@@ -244,8 +264,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="在 deepl.com 注册 DeepL API Free 计划获取。Free 每月 50 万字符；key 以 :fx 结尾自动走免费端点"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t10"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -277,7 +297,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="Base URL（默认 api.openai.com/v1，可填中转）">
+                        android:hint="@string/common_t01">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etOpenAIBaseUrl"
@@ -292,7 +312,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="模型（默认 gpt-4o-mini）">
+                        android:hint="@string/engine_settings_t27">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etOpenAIModel"
@@ -306,8 +326,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="大陆网络需自备访问条件，或填 OpenAI 兼容中转地址"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t15"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -339,7 +359,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="模型（默认 claude-3-5-haiku，便宜快速）">
+                        android:hint="@string/engine_settings_t25">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etClaudeModel"
@@ -353,8 +373,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="在 console.anthropic.com 获取。大陆网络需自备访问条件"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t09"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -371,7 +391,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="阿里云百炼 API Key (sk-...)">
+                        android:hint="@string/engine_settings_t38">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etQwenKey"
@@ -386,7 +406,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="模型（默认 qwen-plus，可选 qwen-turbo/qwen-max）">
+                        android:hint="@string/engine_settings_t28">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etQwenModel"
@@ -400,8 +420,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="在阿里云百炼平台获取 Key，国内直连。新用户有免费 Token 额度"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t14"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -418,7 +438,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="智谱 API Key">
+                        android:hint="@string/engine_settings_t21">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etGLMKey"
@@ -433,7 +453,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="模型（默认 glm-4-flash，免费）">
+                        android:hint="@string/engine_settings_t26">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etGLMModel"
@@ -447,8 +467,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="在 open.bigmodel.cn 获取。glm-4-flash 免费调用，国内直连"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t12"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -465,7 +485,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="火山方舟 ARK API Key">
+                        android:hint="@string/engine_settings_t30">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etDoubaoKey"
@@ -480,7 +500,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="模型/接入点 ID（ep-xxx，方舟控制台创建）">
+                        android:hint="@string/engine_settings_t22">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etDoubaoModel"
@@ -494,8 +514,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="火山引擎方舟平台创建推理接入点后，填 ep- 开头的接入点 ID。国内直连"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t29"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -512,7 +532,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="百度 AppID">
+                        android:hint="@string/engine_settings_t31">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etBaiduAppId"
@@ -527,7 +547,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="百度密钥">
+                        android:hint="@string/engine_settings_t32">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etBaiduKey"
@@ -541,8 +561,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="在 fanyi-api.baidu.com 注册获取。标准版每月 5 万字符免费，国内直连"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t11"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -558,8 +578,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="无需密钥，选中即用。"
-                        android:textColor="@color/text_primary"
+                        android:text="@string/engine_settings_t20"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
@@ -567,8 +587,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="走 bing.com/translator 网页自用的接口，免费。代价是非公开接口 —— 微软改版或限流时会失败（会如实报错，不假装成功）。\n\n注意：它只能翻文字。实时屏幕翻译要把截图交给能读图的模型，所以那个功能用不了这个引擎。"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t36"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -584,8 +604,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="完全在本机运行 —— 无密钥、无额度、断网可用"
-                        android:textColor="@color/text_primary"
+                        android:text="@string/engine_settings_t16"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="12sp"
                         android:textStyle="bold" />
 
@@ -593,37 +613,51 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="模型在手机 CPU 上推理，译文不出设备。代价：比云端慢（首句还要多等几秒加载模型）、更耗电 —— 它是离线兜底，不是更快的那条路。\n\n图片翻译用不了它（纯文本模型），会自动走「本机 OCR 认字 → 本地翻译」。"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t24"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="量化档（越大越准、越慢、越占内存）"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t37"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="12sp" />
 
-                    <Spinner
-                        android:id="@+id/spinnerHyMtQuant"
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.ScreenTranslator.DropdownLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp" />
+                        android:layout_marginTop="2dp">
+
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/spinnerHyMtQuant"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
 
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="下载源（同一份文件，实测速度差 12 倍）"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t06"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="12sp" />
 
-                    <Spinner
-                        android:id="@+id/spinnerHyMtSource"
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.ScreenTranslator.DropdownLayout"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp" />
+                        android:layout_marginTop="2dp">
+
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/spinnerHyMtSource"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -640,14 +674,21 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="推理线程"
-                                android:textColor="@color/text_secondary"
+                                android:text="@string/engine_settings_t19"
+                                android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="12sp" />
 
-                            <Spinner
-                                android:id="@+id/spinnerHyMtThreads"
+                            <com.google.android.material.textfield.TextInputLayout
+                                style="@style/Widget.ScreenTranslator.DropdownLayout"
                                 android:layout_width="match_parent"
-                                android:layout_height="wrap_content" />
+                                android:layout_height="wrap_content">
+
+                                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                                    android:id="@+id/spinnerHyMtThreads"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:inputType="none" />
+                            </com.google.android.material.textfield.TextInputLayout>
                         </LinearLayout>
 
                         <LinearLayout
@@ -660,14 +701,21 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="上下文长度"
-                                android:textColor="@color/text_secondary"
+                                android:text="@string/engine_settings_t05"
+                                android:textColor="?attr/colorOnSurfaceVariant"
                                 android:textSize="12sp" />
 
-                            <Spinner
-                                android:id="@+id/spinnerHyMtContext"
+                            <com.google.android.material.textfield.TextInputLayout
+                                style="@style/Widget.ScreenTranslator.DropdownLayout"
                                 android:layout_width="match_parent"
-                                android:layout_height="wrap_content" />
+                                android:layout_height="wrap_content">
+
+                                <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                                    android:id="@+id/spinnerHyMtContext"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="wrap_content"
+                                    android:inputType="none" />
+                            </com.google.android.material.textfield.TextInputLayout>
                         </LinearLayout>
                     </LinearLayout>
 
@@ -676,8 +724,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="10dp"
-                        android:text="模型状态：未下载"
-                        android:textColor="@color/text_primary"
+                        android:text="@string/engine_settings_tv_hy_mt_status"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="12sp" />
 
                     <ProgressBar
@@ -694,7 +742,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:text="下载模型"
+                        android:text="@string/engine_settings_btn_hy_mt_download"
                         android:textSize="13sp" />
 
                     <com.google.android.material.button.MaterialButton
@@ -703,8 +751,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="从文件导入 gguf（自备模型）"
-                        android:textColor="@color/accent"
+                        android:text="@string/engine_settings_btn_hy_mt_import"
+                        android:textColor="?attr/colorPrimary"
                         android:textSize="13sp" />
 
                     <LinearLayout
@@ -719,8 +767,8 @@
                             android:layout_width="0dp"
                             android:layout_weight="1"
                             android:layout_height="wrap_content"
-                            android:text="预加载"
-                            android:textColor="@color/accent"
+                            android:text="@string/engine_settings_btn_hy_mt_preload"
+                            android:textColor="?attr/colorPrimary"
                             android:textSize="13sp" />
 
                         <com.google.android.material.button.MaterialButton
@@ -730,8 +778,8 @@
                             android:layout_weight="1"
                             android:layout_marginStart="6dp"
                             android:layout_height="wrap_content"
-                            android:text="卸载"
-                            android:textColor="@color/accent"
+                            android:text="@string/engine_settings_btn_hy_mt_unload"
+                            android:textColor="?attr/colorPrimary"
                             android:textSize="13sp" />
 
                         <com.google.android.material.button.MaterialButton
@@ -741,8 +789,8 @@
                             android:layout_weight="1"
                             android:layout_marginStart="6dp"
                             android:layout_height="wrap_content"
-                            android:text="删除文件"
-                            android:textColor="@color/accent"
+                            android:text="@string/engine_settings_btn_hy_mt_delete"
+                            android:textColor="?attr/colorPrimary"
                             android:textSize="13sp" />
                     </LinearLayout>
 
@@ -752,8 +800,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="跑一次基准（5 句，结果写进诊断信息）"
-                        android:textColor="@color/accent"
+                        android:text="@string/engine_settings_btn_hy_mt_bench"
+                        android:textColor="?attr/colorPrimary"
                         android:textSize="12sp" />
 
                     <com.google.android.material.button.MaterialButton
@@ -762,16 +810,16 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="6dp"
-                        android:text="复制诊断信息（设备指令集 / 线程 / 内存 / 延迟）"
-                        android:textColor="@color/accent"
+                        android:text="@string/engine_settings_btn_hy_mt_copy_diag"
+                        android:textColor="?attr/colorPrimary"
                         android:textSize="12sp" />
 
                     <TextView
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="换量化档后会自动重新加载；模型闲置 5 分钟或系统内存吃紧时会自动卸载。"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t18"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -788,7 +836,7 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:hint="彩云 Token">
+                        android:hint="@string/engine_settings_t17">
 
                         <com.google.android.material.textfield.TextInputEditText
                             android:id="@+id/etCaiyunToken"
@@ -802,8 +850,8 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="4dp"
-                        android:text="在 platform.caiyunapp.com 申请。新用户 100 万字免费额度，国内直连"
-                        android:textColor="@color/text_secondary"
+                        android:text="@string/engine_settings_t13"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:textSize="10sp" />
                 </LinearLayout>
 
@@ -811,21 +859,57 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="目标语言（源语言自动识别）"
-                    android:textColor="@color/text_primary"
+                    android:text="@string/engine_settings_t48"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="13sp" />
 
-                <Spinner
-                    android:id="@+id/spinnerTarget"
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.ScreenTranslator.DropdownLayout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="4dp" />
+                    android:layout_marginTop="4dp">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/spinnerSource"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/engine_settings_t51"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="10sp" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/engine_settings_t33"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="13sp" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.ScreenTranslator.DropdownLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/spinnerTarget"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSave"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:text="保存"
+            android:text="@string/common_btn_save"
             android:textSize="14sp" />
 
         <com.google.android.material.button.MaterialButton
@@ -834,12 +918,13 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="测试翻译（真调 API 验证 Key）"
-            android:textColor="@color/accent"
+            android:text="@string/engine_settings_btn_test_translate"
+            android:textColor="?attr/colorPrimary"
             android:textSize="13sp" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
-</ScrollView>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

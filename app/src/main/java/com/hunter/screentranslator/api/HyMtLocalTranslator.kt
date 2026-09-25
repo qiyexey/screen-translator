@@ -61,9 +61,21 @@ private const val MAX_TOTAL_CHARS = 3000
 
 class HyMtLocalTranslator(private val quant: HyMtQuant) : Translator {
 
-    override suspend fun translate(text: String, targetLang: String): Result<String> {
+    override suspend fun translate(
+        text: String,
+        targetLang: String,
+        sourceLang: String
+    ): Result<String> {
         if (text.isBlank()) return Result.success("")
         val targetName = HYMT_TARGET_NAMES[targetLang] ?: targetLang
+        // v1.20.0：源语言。同样要转成官方规范的全称（"ja" 不认，要用"日语"），
+        // auto 保持 null 表示不指定。用同一张 HYMT_TARGET_NAMES —— 它本来就是
+        // "语言码 → 全称"的表，与方向无关。
+        val sourceName = if (sourceLang == SOURCE_AUTO) {
+            null
+        } else {
+            HYMT_TARGET_NAMES[sourceLang] ?: sourceLang
+        }
 
         if (text.length > MAX_TOTAL_CHARS) {
             // 不静默产垃圾：本机 CPU 上这个量级要等好几分钟，界面只有"正在翻译…"，
@@ -79,7 +91,10 @@ class HyMtLocalTranslator(private val quant: HyMtQuant) : Translator {
 
         val chunks = chunkByLines(text, MAX_CHARS_PER_REQUEST)
         if (chunks.size == 1) {
-            return HyMtRuntime.generate(buildHyMtPrompt(text, targetName), maxTokensFor(text))
+            return HyMtRuntime.generate(
+                buildHyMtPrompt(text, targetName, sourceName),
+                maxTokensFor(text)
+            )
         }
 
         // 长文本按行分块顺序翻译再拼回。
@@ -90,7 +105,10 @@ class HyMtLocalTranslator(private val quant: HyMtQuant) : Translator {
         // 输出被 1024 token 上限截断。
         val sb = StringBuilder()
         chunks.forEachIndexed { i, chunk ->
-            val r = HyMtRuntime.generate(buildHyMtPrompt(chunk, targetName), maxTokensFor(chunk))
+            val r = HyMtRuntime.generate(
+                buildHyMtPrompt(chunk, targetName, sourceName),
+                maxTokensFor(chunk)
+            )
             val out = r.getOrNull()
             if (out == null) {
                 // 第一段就失败 → 整体失败（原因透传）；后续段落失败 → 保住已翻出的部分，
@@ -152,9 +170,35 @@ class HyMtLocalTranslator(private val quant: HyMtQuant) : Translator {
     private fun maxTokensFor(text: String): Int =
         (text.length * 2 + 96).coerceIn(128, 1024)
 
-    private fun buildHyMtPrompt(sourceText: String, targetName: String): String = buildString {
+    /**
+     * 构造 Hy-MT2 的提示词。
+     *
+     * 严格贴合官方规范的句式 —— 这个 1.8B 小模型对提示词格式很敏感，
+     * 换成"你是翻译引擎…"这类自由发挥的写法质量会明显下降。
+     *
+     * v1.20.0 新增 [sourceName]：指定了就插一句"原文语言是 X"。
+     * 之所以**不能**改成 `将以下<源>文本翻译为<目标>` 这种结构：
+     * 那样会在"将以下"和"文本"之间插入不定长的语言名，破坏官方句式。
+     * 追加一句独立说明既保留原句式，又给了模型必要信息。
+     * [sourceName] 为 null 时逐字输出原提示词 —— 不指定源语言的行为完全不变。
+     *
+     * 注意：这里拼的是**整句**，不做分段；调用方 [translate] 按行切块后
+     * 每块都会带上这句，块数再多也不会丢掉源语言信息。
+     */
+    private fun buildHyMtPrompt(
+        sourceText: String,
+        targetName: String,
+        sourceName: String? = null
+    ): String = buildString {
         append("将以下文本翻译为 ")
         append(targetName)
+        if (sourceName != null) {
+            append("（原文语言是 ")
+            append(sourceName)
+            append("，请直接按 ")
+            append(sourceName)
+            append(" 理解，不要自行判断语种）")
+        }
         append("，注意只需要输出翻译后的结果，不要额外解释：\n\n")
         append(sourceText)
     }

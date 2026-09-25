@@ -1,52 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/bg_primary"
-    android:fillViewport="true">
+    android:background="?attr/colorSurface"
+    android:orientation="vertical">
 
-    <LinearLayout
+    <!-- M3 TopAppBar（v1.19.0）：替代原来手写的"返回"文字按钮 + 标题 TextView -->
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topAppBar"
+        style="@style/Widget.ScreenTranslator.Toolbar"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:padding="20dp">
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationContentDescription="@string/common_btn_back_content_description"
+        app:title="@string/tts_settings_t03" />
 
-        <!-- 返回栏 -->
+    <com.google.android.material.divider.MaterialDivider
+        style="@style/Widget.ScreenTranslator.Divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp" />
+
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true">
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:gravity="center_vertical"
-            android:layout_marginBottom="6dp">
-
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnBack"
-                style="@style/Widget.ScreenTranslator.Button.Outlined"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="0dp"
-                android:text="‹ 返回"
-                android:textColor="@color/accent"
-                android:textSize="13sp" />
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:layout_marginStart="12dp"
-                android:text="朗读译文"
-                android:textColor="@color/text_primary"
-                android:textSize="18sp"
-                android:textStyle="bold" />
-        </LinearLayout>
+            android:orientation="vertical"
+            android:paddingHorizontal="20dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="20dp">
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:cardCornerRadius="@dimen/md_card_radius"
             app:cardElevation="0dp"
-            app:cardBackgroundColor="@color/bg_card">
+            app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -54,18 +47,18 @@
                 android:orientation="vertical"
                 android:padding="16dp">
                 <!-- ==================== v1.8.0：朗读译文 ==================== -->
-                <View
+                <com.google.android.material.divider.MaterialDivider
+                    style="@style/Widget.ScreenTranslator.Divider"
                     android:layout_width="match_parent"
                     android:layout_height="1dp"
-                    android:layout_marginTop="14dp"
-                    android:background="@color/divider" />
+                    android:layout_marginTop="14dp" />
 
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="12dp"
-                    android:text="🔊 朗读"
-                    android:textColor="@color/text_primary"
+                    android:text="@string/tts_settings_t08"
+                    android:textColor="?attr/colorOnSurface"
                     android:textSize="14sp"
                     android:textStyle="bold" />
 
@@ -73,8 +66,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="用系统语音引擎朗读。翻译结果面板上也会出现「🔊」按钮，长按它可快速切换朗读内容。"
-                    android:textColor="@color/text_secondary"
+                    android:text="@string/tts_settings_t04"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="11sp" />
 
                 <!-- v1.9.3：朗读内容（原文 / 译文 / 两者） -->
@@ -89,15 +82,22 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="朗读内容"
-                        android:textColor="@color/text_primary"
+                        android:text="@string/tts_settings_t02"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="13sp" />
 
-                    <Spinner
-                        android:id="@+id/spinnerTtsContent"
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.ScreenTranslator.DropdownLayout"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:minWidth="150dp" />
+                        android:minWidth="150dp">
+
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/spinnerTtsContent"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
 
                 <!-- 朗读原文时用的语言（译文语言即「目标语言」） -->
@@ -113,15 +113,22 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="原文语言"
-                        android:textColor="@color/text_primary"
+                        android:text="@string/tts_settings_t01"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="13sp" />
 
-                    <Spinner
-                        android:id="@+id/spinnerTtsSourceLang"
+                    <com.google.android.material.textfield.TextInputLayout
+                        style="@style/Widget.ScreenTranslator.DropdownLayout"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:minWidth="150dp" />
+                        android:minWidth="150dp">
+
+                        <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                            android:id="@+id/spinnerTtsSourceLang"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:inputType="none" />
+                    </com.google.android.material.textfield.TextInputLayout>
                 </LinearLayout>
 
                 <LinearLayout
@@ -135,8 +142,8 @@
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:text="翻译完成后自动朗读"
-                        android:textColor="@color/text_primary"
+                        android:text="@string/tts_settings_t05"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="13sp" />
 
                     <com.google.android.material.switchmaterial.SwitchMaterial
@@ -149,8 +156,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="10dp"
-                    android:text="语速（0.5× ~ 2.0×）"
-                    android:textColor="@color/text_secondary"
+                    android:text="@string/tts_settings_t06"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="12sp" />
 
                 <LinearLayout
@@ -159,12 +166,14 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
-                    <SeekBar
+                    <com.google.android.material.slider.Slider
                         android:id="@+id/seekTtsRate"
+                        style="@style/Widget.ScreenTranslator.Slider"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:max="15" />
+                        android:valueFrom="0"
+                        android:valueTo="15" />
 
                     <TextView
                         android:id="@+id/tvTtsRateValue"
@@ -173,7 +182,7 @@
                         android:minWidth="46dp"
                         android:gravity="end"
                         android:text="1.0×"
-                        android:textColor="@color/text_primary"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -181,8 +190,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="6dp"
-                    android:text="音调（0.5 ~ 2.0）"
-                    android:textColor="@color/text_secondary"
+                    android:text="@string/tts_settings_t07"
+                    android:textColor="?attr/colorOnSurfaceVariant"
                     android:textSize="12sp" />
 
                 <LinearLayout
@@ -191,12 +200,14 @@
                     android:orientation="horizontal"
                     android:gravity="center_vertical">
 
-                    <SeekBar
+                    <com.google.android.material.slider.Slider
                         android:id="@+id/seekTtsPitch"
+                        style="@style/Widget.ScreenTranslator.Slider"
                         android:layout_width="0dp"
                         android:layout_height="wrap_content"
                         android:layout_weight="1"
-                        android:max="15" />
+                        android:valueFrom="0"
+                        android:valueTo="15" />
 
                     <TextView
                         android:id="@+id/tvTtsPitchValue"
@@ -205,7 +216,7 @@
                         android:minWidth="46dp"
                         android:gravity="end"
                         android:text="1.0"
-                        android:textColor="@color/text_primary"
+                        android:textColor="?attr/colorOnSurface"
                         android:textSize="12sp" />
                 </LinearLayout>
 
@@ -215,8 +226,8 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="8dp"
-                    android:text="试听（朗读当前目标语言示例）"
-                    android:textColor="@color/accent"
+                    android:text="@string/tts_settings_btn_tts_test"
+                    android:textColor="?attr/colorPrimary"
                     android:textSize="13sp" />
 
                 <!-- v1.9.1：朗读不响时用它定位原因（列出系统内的语音引擎） -->
@@ -226,19 +237,20 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="2dp"
-                    android:text="检测语音引擎"
-                    android:textColor="@color/accent"
+                    android:text="@string/tts_settings_btn_tts_diag"
+                    android:textColor="?attr/colorPrimary"
                     android:textSize="12sp" />
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSave"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"
-            android:text="保存"
+            android:text="@string/common_btn_save"
             android:textSize="14sp" />
 
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
     </LinearLayout>
-</ScrollView>
+    </androidx.core.widget.NestedScrollView>
+</LinearLayout>

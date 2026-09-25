@@ -21,6 +21,7 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import com.hunter.screentranslator.R
 import com.hunter.screentranslator.util.Roi
 import kotlin.math.abs
 import kotlin.math.hypot
@@ -358,7 +359,7 @@ class RoiPickerView(
     private fun refreshPreview() {
         val rect = maskView.current() ?: run {
             preview.setImageDrawable(null)
-            tvSize.text = "在画面上拖出要翻译的文字区域"
+            tvSize.text = context.getString(R.string.roi_picker_t01)
             return
         }
         val bmp = frame
@@ -369,7 +370,7 @@ class RoiPickerView(
         val fr = Roi.toFrameCoords(rect, bmp.width, bmp.height, width, height)
         if (fr == null) {
             preview.setImageDrawable(null)
-            tvSize.text = "选区不合法，请重画"
+            tvSize.text = context.getString(R.string.roi_picker_t02)
             return
         }
         runCatching {

@@ -2,7 +2,9 @@ package com.hunter.screentranslator.ui
 
 import android.os.Bundle
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
 import com.hunter.screentranslator.databinding.ActivityAsrSettingsBinding
+import com.hunter.screentranslator.util.EdgeToEdge
 
 /**
  * v1.12.0 三级页：语音识别（听视频用）。
@@ -18,7 +20,8 @@ class AsrSettingsActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityAsrSettingsBinding.inflate(layoutInflater)
         setContentView(b.root)
-        b.btnBack.setOnClickListener { finish() }
+        EdgeToEdge.install(this)
+        b.topAppBar.setNavigationOnClickListener { finish() }
 
         b.etAsrKey.setText(App.prefs.asrApiKey)
         b.etAsrBaseUrl.setText(App.prefs.asrBaseUrl)
@@ -30,7 +33,7 @@ class AsrSettingsActivity : BaseActivity() {
                 .ifBlank { "https://api.openai.com/v1" }
             App.prefs.asrModel = b.etAsrModel.text.toString().trim()
                 .ifBlank { "whisper-1" }
-            toast("已保存")
+            toast(getString(R.string.common_t10))
         }
     }
 }

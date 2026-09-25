@@ -36,7 +36,7 @@ class ProcessTextActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             OverlayService.update(text.take(300), "正在翻译…")
-            val result = TranslatorFactory.current().translate(text, App.prefs.targetLang)
+            val result = TranslatorFactory.current().translate(text, App.prefs.targetLang, App.prefs.sourceLang)
             val translated = result.fold(
                 onSuccess = { it },
                 onFailure = { e ->

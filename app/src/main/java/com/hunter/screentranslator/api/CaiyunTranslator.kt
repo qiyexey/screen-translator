@@ -22,7 +22,11 @@ class CaiyunTranslator(
     private val client: OkHttpClient = HttpClients.standard
 ) : Translator {
 
-    override suspend fun translate(text: String, targetLang: String): Result<String> =
+    override suspend fun translate(
+        text: String,
+        targetLang: String,
+        sourceLang: String
+    ): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 if (text.isBlank()) return@runCatching ""
@@ -30,7 +34,10 @@ class CaiyunTranslator(
                 val token = App.prefs.caiyunToken.trim()
                 require(token.isNotBlank()) { "未配置彩云小译 Token" }
 
-                val transType = "auto2$targetLang"
+                // trans_type 的格式是 "<源>2<目标>"，彩云把小写 "auto" 识别为自动检测。
+                // 彩云的语言码与内部码一致（zh/en/ja/ko/fr/de/es/ru 全部相同），
+                // 所以显式指定时可以直接用内部码，不需要额外的映射表。
+                val transType = "${sourceLang}2$targetLang"
 
                 // 多行文本按行拆分翻译（彩云按行返回）
                 val lines = text.split('\n')

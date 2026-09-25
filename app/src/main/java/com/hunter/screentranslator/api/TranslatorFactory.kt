@@ -18,6 +18,11 @@ object TranslatorFactory {
         val engine = TranslationEngine.fromKey(App.prefs.engine)
         // 第二项是「缓存作用域」的细粒度部分（端点 + 模型）。换中转、换模型、换区域后
         // 译文可能不同，不能复用老译文；同名模型挂在不同中转后端上甚至可能是两套服务。
+        //
+        // v1.20.0：源语言同样是影响译文的维度，但它**不在这里拼**。
+        // 它随 [Translator.translate] 的第三个参数逐次传入，由 [CachingTranslator]
+        // 并入作用域。放在这里就等于承认"源语言是全局的"，而它其实是每次调用
+        // 都可能不同的入参 —— 同一次屏幕翻译里，正文和按钮可能是两种语言。
         val built: Pair<Translator, String> = when (engine) {
             TranslationEngine.HYMT_LOCAL -> {
                 val q = HyMtQuant.fromId(App.prefs.hymtQuant)

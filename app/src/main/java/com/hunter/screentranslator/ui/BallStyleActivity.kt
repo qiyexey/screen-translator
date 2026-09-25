@@ -4,10 +4,12 @@ import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
-import android.widget.SeekBar
+import com.google.android.material.slider.Slider
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
 import com.hunter.screentranslator.databinding.ActivityBallStyleBinding
 import com.hunter.screentranslator.service.OverlayService
+import com.hunter.screentranslator.util.EdgeToEdge
 
 /**
  * v1.12.0 三级页：悬浮球与结果面板外观。
@@ -36,16 +38,17 @@ class BallStyleActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityBallStyleBinding.inflate(layoutInflater)
         setContentView(b.root)
-        b.btnBack.setOnClickListener { finish() }
+        EdgeToEdge.install(this)
+        b.topAppBar.setNavigationOnClickListener { finish() }
 
         setupBallStyleControls()
 
         b.btnSave.setOnClickListener {
-            App.prefs.ballAlpha = (b.seekBallAlpha.progress + 20) / 100f
-            App.prefs.ballSizeDp = b.seekBallSize.progress + 36
+            App.prefs.ballAlpha = (b.seekBallAlpha.value.toInt() + 20) / 100f
+            App.prefs.ballSizeDp = b.seekBallSize.value.toInt() + 36
             App.prefs.ballColor = selectedBallColor
-            App.prefs.panelAlpha = (b.seekPanelAlpha.progress + 40) / 100f
-            toast("已保存")
+            App.prefs.panelAlpha = (b.seekPanelAlpha.value.toInt() + 40) / 100f
+            toast(getString(R.string.common_t10))
             // 样式变化 → 即时刷新悬浮球外观与面板透明度（球不存在时只刷面板）
             if (App.prefs.overlayEnabled) {
                 runCatching { OverlayService.refreshBallStyle(this) }
@@ -54,37 +57,35 @@ class BallStyleActivity : BaseActivity() {
     }
 
     private fun setupBallStyleControls() {
-        // 透明度：SeekBar 0..80 映射 20%..100%
-        b.seekBallAlpha.progress = (App.prefs.ballAlpha * 100).toInt() - 20
+        // 透明度：Slider 档位 0..80 映射 20%..100%
+        // value 一律 coerceIn —— Slider 与 SeekBar 不同，越界是抛异常而不是静默钳制
+        b.seekBallAlpha.value = ((App.prefs.ballAlpha * 100).toInt() - 20).toFloat().coerceIn(0f, 80f)
         b.tvBallAlphaValue.text = "${(App.prefs.ballAlpha * 100).toInt()}%"
-        b.seekBallAlpha.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+        b.seekBallAlpha.addOnChangeListener(object : Slider.OnChangeListener {
+            override fun onValueChange(slider: Slider, value: Float, fromUser: Boolean) {
+                val p = value.toInt()
                 b.tvBallAlphaValue.text = "${p + 20}%"
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
-        // 大小：SeekBar 0..28 映射 36..64 dp
-        b.seekBallSize.progress = App.prefs.ballSizeDp - 36
+        // 大小：Slider 档位 0..28 映射 36..64 dp
+        b.seekBallSize.value = (App.prefs.ballSizeDp - 36).toFloat().coerceIn(0f, 28f)
         b.tvBallSizeValue.text = "${App.prefs.ballSizeDp} dp"
-        b.seekBallSize.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+        b.seekBallSize.addOnChangeListener(object : Slider.OnChangeListener {
+            override fun onValueChange(slider: Slider, value: Float, fromUser: Boolean) {
+                val p = value.toInt()
                 b.tvBallSizeValue.text = "${p + 36} dp"
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
-        // 结果面板透明度：SeekBar 0..60 映射 40%..100%
-        b.seekPanelAlpha.progress = (App.prefs.panelAlpha * 100).toInt() - 40
+        // 结果面板透明度：Slider 档位 0..60 映射 40%..100%
+        b.seekPanelAlpha.value = ((App.prefs.panelAlpha * 100).toInt() - 40).toFloat().coerceIn(0f, 60f)
         b.tvPanelAlphaValue.text = "${(App.prefs.panelAlpha * 100).toInt()}%"
-        b.seekPanelAlpha.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+        b.seekPanelAlpha.addOnChangeListener(object : Slider.OnChangeListener {
+            override fun onValueChange(slider: Slider, value: Float, fromUser: Boolean) {
+                val p = value.toInt()
                 b.tvPanelAlphaValue.text = "${p + 40}%"
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
 
         // 颜色选择器：动态生成圆形色块

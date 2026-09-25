@@ -96,7 +96,13 @@ class OverlayService : Service() {
                         )
                     }.onFailure { Log.e(TAG, "打开图片翻译失败: $it") }
                 }
-            ).also { it.attachToWindow(windowManager) }
+            ).also {
+                it.attachToWindow(windowManager)
+                // v1.21.0：悬浮球是给“其他 App”用的，不该压在自己的主页/设置页上。
+                // Application 的 ActivityLifecycleCallbacks 会维护 ownAppForeground；
+                // 服务晚于 Activity 启动时也要在这里读取一次，否则刚创建的球会闪出来。
+                if (ownAppForeground) it.visibility = View.GONE
+            }
         }.onFailure { Log.e(TAG, "悬浮球添加失败: $it") }
     }
 
@@ -206,6 +212,31 @@ class OverlayService : Service() {
 
         @Volatile
         private var instance: OverlayService? = null
+
+        /**
+         * v1.21.0：本应用是否正在前台。
+         *
+         * 悬浮球用于跨应用翻译，显示在自己的页面上只会遮住内容（尤其设置页顶端）。
+         * Application 用 Activity 的 started 计数维护这个状态：第一个 Activity 进入时
+         * 隐藏，最后一个 Activity 离开时恢复。这样 Activity→Activity 的内部跳转不会
+         * 在中间闪一下球，进入系统权限页又能正常恢复。
+         */
+        @Volatile
+        private var ownAppForeground = false
+
+        fun setOwnAppForeground(foreground: Boolean) {
+            ownAppForeground = foreground
+            val svc = instance ?: return
+            svc.ballView?.post {
+                svc.ballView?.visibility = if (foreground || !App.prefs.floatingBall) {
+                    View.GONE
+                } else {
+                    View.VISIBLE
+                }
+                // 自己 App 在前台时翻译结果面板同样不应盖住表单。
+                if (foreground) svc.overlayView?.visibility = View.GONE
+            }
+        }
 
         /** 更新翻译面板内容 */
         fun update(source: String, translated: String) {

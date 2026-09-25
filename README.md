@@ -2,6 +2,68 @@
 
 一个安卓端实时屏幕翻译 App：**11 种翻译方式**、**11 家云端引擎 + 1 个本地离线大模型**、端侧 OCR 拍照翻译。
 
+---
+
+## ⚠️ 使用前必读
+
+### 本 App **不含任何内置密钥**，开箱即用是做不到的
+
+仓库里没有、也不会有作者自己的 API Key（13 项密钥经 `AndroidKeyStore` 加密后只存在**你自己的设备**上，
+见文末「隐私」）。下载安装后，**翻译这一步在你配置之前一定失败** —— 这不是 bug，
+是"不把别人的额度烧给你"的代价。
+
+### 为什么必须自己配：翻译和"说话"是两件事
+
+很多人以为"语音翻译装完就能说话"，其实它有**两段**、各自独立：
+
+| 环节 | 干什么 | 密钥要求 |
+|---|---|---|
+| ① **听写（ASR）** | 把你说的话变成文字 | 用**手机系统识别** → **免密钥**；用 Whisper → 看你接的服务 |
+| ② **翻译** | 把文字变成目标语言 | **默认引擎必须有密钥**，唯一例外见下 |
+
+**① 是通顺的**：默认走手机自带识别（GMS 或厂商引擎），零配置。
+**② 才是卡点**：默认引擎是 DeepSeek，没填 Key 时开录能听写、翻译必失败。
+v1.26.0 起 App 会在**开录之前**就弹窗拦住（而不是让你说完一整句话才报错），
+提示条也会写明"当前引擎没有配置"，并直接给「去配置引擎」按钮。
+
+### 零成本跑通的最小路径（推荐先这样试）
+
+想一分钱不花先把语音翻译跑起来，两步：
+
+1. **翻译引擎**：设置 → 🌐 翻译引擎 · 语言 · 密钥 → 选 **「必应网页版」** → 保存。
+   它免密钥、免注册，走的是必应网页版的自用接口。
+   > 代价要讲清楚：**服务端随时可能改，属于"能用多久看运气"**，且**只能翻文字、不接受图片**。
+   > 长期使用建议换成下面的任一正式引擎。
+2. **语音识别**：设置 → 🎧 语音识别 → 保持 **「手机系统」**（默认值）。
+   若机型查不到系统语音服务（部分国产 ROM 会偷偷把识别服务对第三方 App 隐藏），
+   界面上会提示，这时才需要配 Whisper。
+
+**另有第三条路：完全离线** —— 选「腾讯 Hy-MT2 1.8B（本地·离线）」，
+模型在你手机 CPU 上跑，无密钥、无额度、飞行模式可用（首次需下载 1.13GB 模型，详见下方专章）。
+
+### 要换成正式引擎的话，申请入口
+
+| 引擎 | 申请入口 | 备注 |
+|---|---|---|
+| **DeepSeek**（默认） | [platform.deepseek.com](https://platform.deepseek.com) | 按量计费、极便宜、大陆直连 |
+| 通义千问 | [bailian.console.aliyun.com](https://bailian.console.aliyun.com) | 新用户有免费额度 |
+| 智谱 GLM | [open.bigmodel.cn](https://open.bigmodel.cn) | `glm-4-flash` 免费 |
+| 火山豆包 | [console.volcengine.com/ark](https://console.volcengine.com/ark) | 需同时填模型名（如 `doubao-1.5-lite-32k`） |
+| 微软翻译 | [portal.azure.com](https://portal.azure.com) | 每月 200 万字符免费 |
+| DeepL | [deepl.com/pro-api](https://www.deepl.com/pro-api) | Free 档每月 50 万字符 |
+| 百度翻译 | [fanyi-api.baidu.com](https://fanyi-api.baidu.com) | 需填 AppID + 密钥（两个都要） |
+| 彩云小译 | [dashboard.caiyunapp.com](https://dashboard.caiyunapp.com) | 新用户 100 万字/月 |
+| OpenAI / Claude / Google | 各自官网 | 大陆需自备网络或中转 |
+
+### 语音识别（可选，只有系统识别不可用时才需要）
+
+走 OpenAI 兼容的 `/v1/audio/transcriptions`。**Key 可以留空** ——
+Key 为空时 App 完全不发送 `Authorization` 头，所以自建的
+`faster-whisper-server` / `whisper.cpp server` 之类免鉴权服务可直接用
+（v1.20.0 起，地址填成非默认值即可）。
+
+---
+
 | 模式 | 用法 | 原理 |
 |------|------|------|
 | 🌐 **全屏自动翻译** | 打开任意应用，屏幕变化自动翻译整屏 | `AccessibilityService` 监听窗口内容变化，DFS 遍历节点树 |
@@ -151,6 +213,18 @@ screen-translator/
 ├── build.gradle.kts
 ├── gradle.properties
 ├── gradle/wrapper/gradle-wrapper.properties
+├── scripts/
+│   ├── gen-keystore.sh              # 生成 release 签名密钥（v1.18.0）
+│   ├── inject-edge-to-edge.py       # 批量为 Activity 注入 edge-to-edge（v1.18.0）
+│   ├── extract-strings.py           # 布局文案 → strings.xml（v1.18.0）
+│   ├── extract-strings-kotlin.py    # Kotlin 文案 → strings.xml（v1.18.0）
+│   └── verify-strings.py            # 文案抽离自检（v1.18.0）
+├── jni/
+│   ├── build-android.sh             # NDK 交叉编译 libllama-android.so（v1.18.0）
+│   ├── llama_jni.cpp
+│   ├── llama_context_wrapper.{cpp,h}
+│   └── harness.cpp
+├── .github/workflows/android.yml    # CI：签名 + 混淆 + 产物校验（v1.18.0）
 └── app/
     ├── build.gradle.kts
     ├── proguard-rules.pro
@@ -158,51 +232,43 @@ screen-translator/
         ├── AndroidManifest.xml
         ├── java/com/hunter/screentranslator/
         │   ├── App.kt                      # Application 入口
-        │   ├── api/
+        │   ├── api/                        # 翻译引擎层（接口 + 工厂 + 各实现）
         │   │   ├── Translator.kt            # 翻译接口 + 语言表
-        │   │   ├── DeepSeekTranslator.kt   # DeepSeek 实现
-        │   │   └── WhisperClient.kt        # 语音识别（OpenAI 兼容 /v1/audio/transcriptions）
-        │   ├── overlay/
-        │   │   ├── OverlayView.kt          # 翻译结果面板（可拖动/折叠）
-        │   │   ├── OverlayBallView.kt      # 悬浮球（样式可定制，拖动/单击/双击/长按四种手势）
-        │   │   ├── RegionSelectView.kt    # 框选遮罩（拖出矩形选区）
-        │   │   └── SubtitleOverlayView.kt # 听视频悬浮字幕条
-        │   ├── service/
-        │   │   ├── ScreenReaderService.kt   # 无障碍服务（全屏/划词/定点/框选/剪贴板）
-        │   │   ├── OverlayService.kt        # 悬浮窗前台服务（管面板+球+框选遮罩）
-        │   │   ├── VideoListenService.kt   # 听视频翻译（音频采集+切句+转写+翻译）
-        │   │   └── AudioSegmenter.kt       # 静音检测切句器
-        │   ├── ui/
-        │   │   ├── MainActivity.kt         # 配置主界面
-        │   │   ├── ProcessTextActivity.kt  # 系统菜单「🌐 翻译」入口
-        │   │   ├── TranslateInputActivity.kt # 输入翻译（v1.6.0）
-        │   │   ├── VoiceTranslateActivity.kt # 语音输入翻译（v1.6.0）
-        │   │   └── VideoListenActivity.kt   # 听视频翻译控制页（v1.6.0）
+        │   │   ├── TranslatorFactory.kt     # 引擎工厂
+        │   │   ├── DeepSeekTranslator.kt    # DeepSeek 实现
+        │   │   └── WhisperClient.kt         # 语音识别（OpenAI 兼容 /v1/audio/transcriptions）
+        │   ├── overlay/                    # 悬浮球 / 结果面板 / 框选 / 字幕条
+        │   ├── service/                    # 4 个前台服务（无障碍 / 悬浮窗 / 听视频 / 实时翻译）
+        │   ├── ui/                         # 18 个 Activity
         │   └── util/
         │       ├── Prefs.kt                 # 偏好设置封装
-        │       └── WavUtils.kt             # PCM→WAV 打包（v1.6.0）
-        │   ├── ui/
-        │   │   ├── MainActivity.kt         # 配置主界面
-        │   │   └── ProcessTextActivity.kt  # 系统菜单「🌐 翻译」入口
-        │   └── util/
-        │       └── Prefs.kt                 # 偏好设置封装
+        │       ├── SecretStore.kt           # API Key 的 AndroidKeyStore 加密存储（v1.18.0）
+        │       ├── CrashLog.kt              # 本地崩溃记录（v1.18.0）
+        │       ├── EdgeToEdge.kt            # Android 15 edge-to-edge 适配（v1.18.0）
+        │       └── WavUtils.kt              # PCM→WAV 打包
         └── res/
-            ├── layout/activity_main.xml
-            ├── drawable/                   # 悬浮窗背景、应用图标
-            ├── values/{strings,colors,themes}.xml
-            ├── values-night/themes.xml     # 暗色模式
-            ├── mipmap-anydpi-v26/          # 自适应图标
-            └── xml/accessibility_service_config.xml
+            ├── layout/                      # 13 个布局（文案已全部走 @string）
+            ├── drawable/                    # 悬浮窗背景、应用图标
+            ├── values/{strings,colors,themes,ids}.xml
+            ├── values-night/{colors,themes}.xml   # 暗色模式
+            ├── mipmap-anydpi-v26/           # 自适应图标
+            └── xml/
+                ├── accessibility_service_config.xml
+                ├── backup_rules.xml         # 排除密钥文件的备份规则（v1.18.0）
+                └── data_extraction_rules.xml
 ```
 
 ## 使用步骤
 
+> 动手前先看上面的 **⚠️ 使用前必读** —— 本 App 不含任何密钥，
+> 想零成本先跑通就切「必应网页版」，别直接照下面第 3 步填 DeepSeek。
+
 1. 用 Android Studio 打开 `screen-translator/` 目录，等 Gradle 同步完成
 2. 连接手机（开启 USB 调试）或启动模拟器，点击 Run
-3. 在 App 内：
-   - 填入 **DeepSeek API Key**（在 [platform.deepseek.com](https://platform.deepseek.com) 获取）
-   - 选择**目标语言**（默认中文）
-   - 点击「保存配置」
+3. 在 App 内配置引擎（二选一）：
+   - **零成本**：设置 → 🌐 翻译引擎 → 选「必应网页版」→ 保存
+   - **正式**：选 DeepSeek 等引擎，填对应 API Key（入口见上表）
+   - 无论哪种，再选好**目标语言**（默认中文）
 4. 开启**无障碍服务**：点界面里的「开启」按钮，在系统设置列表里找到「屏幕翻译」并打开
 5. 开启**悬浮窗权限**：点界面里的「开启」按钮，在弹出的权限页打开开关
 6. 两个权限都为 ✅ 后，切换到任意含外文的 App（浏览器、Twitter、YouTube 等）
@@ -248,28 +314,48 @@ screen-translator/
 
 ## 本地打包 APK
 
+> v1.18.0 起，**release 构建必须提供正式签名，缺签名会直接失败**（原因见 `FIXES-1.18.0.md` §1）。
+> 只想装到手机上试：用 `./gradlew assembleDebug`，不受这条限制。
+
 ### 1. 准备签名密钥
 
 本仓库**不含签名密钥** —— 否则任何人 clone 下来都能签出「可覆盖安装到你手机上」的更新。
-自己生成一把即可：
+
+```bash
+bash scripts/gen-keystore.sh
+```
+
+脚本会生成 `release.keystore`（RSA 4096 / PKCS12 / 有效期 10000 天）、
+写好 `keystore.properties`、并打印证书指纹。它**不会覆盖已存在的密钥**。
+**务必备份这把密钥和它的口令**：丢了就再也无法给已安装的用户推送更新。
+
+<details>
+<summary>不想用脚本，手动生成也可以</summary>
 
 ```bash
 keytool -genkeypair -v \
   -keystore release.keystore \
   -alias screentranslator \
-  -keyalg RSA -keysize 2048 -validity 10000
+  -keyalg RSA -keysize 4096 -validity 10000 \
+  -storetype PKCS12
 ```
+</details>
 
 ### 2. 配置签名口令
 
-口令**不写入源码**。放到 `local.properties`（该文件已被 `.gitignore` 排除）：
+口令**不写入源码**，按下面的顺序查找（命中即用）：
+
+1. 环境变量 `SCREEN_TRANSLATOR_STORE_PASSWORD` / `SCREEN_TRANSLATOR_KEY_PASSWORD`
+2. `keystore.properties`（推荐，已被 `.gitignore` 排除）
+3. `local.properties` 里的 `storePassword` / `keyPassword`
+
+`keystore.properties` 内容：
 
 ```properties
-# local.properties
-sdk.dir=/path/to/android-sdk
+storeFile=release.keystore
 storePassword=你的keystore口令
-keyPassword=你的key口令
 keyAlias=screentranslator
+keyPassword=你的key口令
 ```
 
 或改用环境变量：
@@ -279,7 +365,10 @@ export SCREEN_TRANSLATOR_STORE_PASSWORD=...
 export SCREEN_TRANSLATOR_KEY_PASSWORD=...
 ```
 
-两种方式都不提供时，`assembleRelease` 仍能构建，只是产出**未签名** APK（不会因缺口令而失败）。
+**三种方式都没有时，`assembleRelease` 会直接报错中止**，不会退回调试证书。
+（v1.17.0 的行为是静默改用 Android 调试证书签名 —— 那种包既上不了架，
+又因为调试密钥全网公开而可以被同包名的恶意包冒名覆盖安装。
+"悄悄降级"比"构建失败"危险得多，所以改成显式失败。）
 
 ### 3. 构建
 
@@ -288,9 +377,29 @@ export SCREEN_TRANSLATOR_KEY_PASSWORD=...
 ./gradlew assembleRelease   # 产物: app/build/outputs/apk/release/app-release.apk
 ```
 
-环境要求：**JDK 17**、Android SDK **Platform 34**、**Build-Tools 34.0.0**。
+环境要求：**JDK 17**、Android SDK **Platform 35**、**Build-Tools 35.0.0**、**AGP 8.6.0+**。
+
+release 构建会开启 R8 混淆 + 资源收缩，产出三样东西：
+
+| 产物 | 用途 |
+|---|---|
+| `app-release.apk` | 安装包（v2 + v3 签名，无 v1） |
+| `mapping.txt` | 混淆映射表，**归档保存**，用来还原线上崩溃堆栈 |
+| `output-metadata.json` | AGP 生成的产物元数据 |
 
 Gradle 仓库已配置阿里云镜像优先（`settings.gradle.kts`），国内网络可直接构建。
+
+### 4. 重新编译本地推理库（可选）
+
+`libllama-android.so` 的产物已入库，正常构建**不需要**重编。
+只有在改 `jni/` 下的源码、或要换 llama.cpp 版本时才需要：
+
+```bash
+ANDROID_NDK_HOME=/path/to/ndk bash jni/build-android.sh
+```
+
+脚本会在 `$HOME/.cache/llama.cpp-android` 下 clone 指定 commit 的 llama.cpp、
+用 NDK 交叉编译，并跑 5 项验收检查（JNI 符号数 / 未解析符号 / 内核指令数 / 16KB 页对齐）。
 
 ## 安装到手机
 
@@ -298,10 +407,18 @@ APK 下载后直接安装（需允许"未知来源应用"）：
 1. 传到手机（微信/QQ文件传输、USB、网盘均可）
 2. 点击 APK → 允许安装
 3. 打开 App → **首次启动会走一遍引导**，逐步把无障碍、悬浮窗、电池优化开好
-4. 到 设置 → 翻译引擎 · 语言 · 密钥，填任一家密钥并保存
+4. 走引导第 ④ 步「配置翻译引擎」—— **这一步不能跳**：要么切「必应网页版」（免密钥），
+   要么填任一家正式引擎的 Key。没配好会一直显示 ❌ 并写明缺什么。
 
 ## 隐私
 
-- API Key 仅保存在本机 SharedPreferences，不上传任何服务器
-- 屏幕文字仅在用户开启「自动翻译」时被收集，直接发往用户配置的 DeepSeek 端点
-- 本 App 不收集任何用户数据
+- **API Key 加密落盘**：13 项密钥（各家 API Key / Secret / Token）经
+  `AndroidKeyStore` 的 AES-GCM 加密后存放，密钥本身由系统 TEE 托管、不出安全硬件。
+  旧版本留下的明文密钥在首次启动时自动迁移并抹除（`SecretStore.kt`）。
+- **密钥不进备份**：`allowBackup` 保持开启（用户的历史与设置仍能被系统备份），
+  但 `backup_rules.xml` / `data_extraction_rules.xml` 已把密钥文件
+  同时排除在**云备份**和**设备间迁移**之外。
+- **崩溃日志只在本机**：`CrashLog.kt` 把崩溃堆栈写到应用私有目录
+  （最多留 5 份），**不联网、不上报**。是否发给开发者完全由用户在设置页手动决定。
+- 屏幕文字仅在用户开启「自动翻译」时被收集，直接发往用户配置的翻译端点
+- 本 App 不收集任何用户数据，无埋点、无广告、无自建服务器

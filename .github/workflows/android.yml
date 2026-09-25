@@ -1,0 +1,149 @@
+# ============================================================================
+# CI：构建 + 混淆 + 签名（v1.18.0 新增）
+#
+# 为什么要有它：v1.17.0 的包是在手机 Termux 里手工构建的，产物里带着
+#   META-INF/version-control-info.textproto: generate_error_reason: NO_SUPPORTED_VCS_FOUND
+# 也就是说**构建时没有版本控制信息** —— 拿到一个包无法回溯它是从哪个提交出来的。
+# 在 CI 里从 git checkout 构建，这个问题自动消失：APK 会带上提交哈希。
+#
+# 同时它把"混淆 + 正式签名"变成流程的固定环节，不再依赖构建者记得配口令。
+#
+# 需要在仓库 Settings → Secrets and variables → Actions 里配置：
+#   KEYSTORE_BASE64       release.keystore 的 base64（见下方生成命令）
+#   KEYSTORE_PASSWORD     storePassword
+#   KEY_ALIAS             keyAlias（通常 screentranslator）
+#   KEY_PASSWORD          keyPassword
+#
+# 生成 KEYSTORE_BASE64：
+#   base64 -w0 release.keystore        # Linux / macOS
+#   base64 -w0 release.keystore        # Termux 同样可用
+# ============================================================================
+name: Android CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: 'platforms;android-35 build-tools;35.0.0 platform-tools'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          # 与 gradle/wrapper/gradle-wrapper.properties 保持一致
+          gradle-version: '8.7'
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      # ---- 只有拿到密钥的构建（main / tag / 手动）才做正式签名 ----
+      - name: Decode signing keystore
+        id: signing
+        if: ${{ github.event_name != 'pull_request' }}
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          if [ -z "$KEYSTORE_BASE64" ]; then
+            echo "::warning::未配置 KEYSTORE_BASE64，本次跳过正式签名（只做构建验证）"
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "$KEYSTORE_BASE64" | base64 -d > release.keystore
+          cat > keystore.properties <<EOF
+          storeFile=release.keystore
+          storePassword=${{ secrets.KEYSTORE_PASSWORD }}
+          keyAlias=${{ secrets.KEY_ALIAS }}
+          keyPassword=${{ secrets.KEY_PASSWORD }}
+          EOF
+          echo "available=true" >> "$GITHUB_OUTPUT"
+
+      # ---- 正式签名可用 → 出 release（R8 混淆 + v2/v3 签名）----
+      - name: Build release (signed, minified)
+        if: steps.signing.outputs.available == 'true'
+        run: ./gradlew --no-daemon assembleRelease
+
+      # ---- 没有密钥（PR / 未配置）→ 只验证代码能编过，不产 release 包 ----
+      # 说明：v1.18.0 起 release 构建缺签名会**直接失败**（这是刻意设计，
+      # 防止再次产出 debug 签名的 release 包），所以这里改跑 assembleDebug。
+      - name: Build debug (verification only)
+        if: steps.signing.outputs.available != 'true'
+        run: ./gradlew --no-daemon assembleDebug
+
+      - name: Upload APK
+        if: steps.signing.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-release
+          path: app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+
+      # ---- mapping.txt 必须归档，但绝不能公开 ----
+      # 它是把线上混淆堆栈还原成可读调用栈的唯一钥匙；同时拿到它等于拿到
+      # 完整代码结构。所以：只作为构建产物保存，不进仓库（.gitignore 已排除）。
+      - name: Upload R8 mapping (keep private)
+        if: steps.signing.outputs.available == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: r8-mapping
+          path: app/build/outputs/mapping/release/mapping.txt
+          if-no-files-found: warn
+          retention-days: 90
+
+      - name: Verify signature is NOT the debug key
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          echo "检查 $APK 的签名证书……"
+          BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          "$ANDROID_HOME/build-tools/$BT/apksigner" verify --print-certs "$APK" | tee /tmp/certs.txt
+          if grep -q "CN=Android Debug" /tmp/certs.txt; then
+            echo "::error::产物仍是 Android 调试证书签名，拒绝通过"
+            exit 1
+          fi
+          echo "✅ 签名证书不是调试密钥"
+
+      - name: Verify R8 actually obfuscated
+        if: steps.signing.outputs.available == 'true'
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk | head -1)
+          BT=$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)
+          # 混淆生效的判据：自有包名下的类名应当消失（只剩清单里必须保留的组件）。
+          # v1.17.0 的包里 com/hunter/screentranslator/ui/MainActivity 等
+          # 类名与包结构全都原样可见 —— 那种情况这里会直接失败。
+          if unzip -p "$APK" classes.dex | strings | grep -qE 'Lcom/hunter/screentranslator/(ui|api|util)/[A-Z][A-Za-z]+;'; then
+            echo "::error::自有类名仍然可见，混淆未生效"
+            exit 1
+          fi
+          echo "✅ 混淆已生效"
+
+      - name: Summary
+        run: |
+          APK=$(ls app/build/outputs/apk/release/*.apk 2>/dev/null | head -1 || true)
+          if [ -n "$APK" ]; then
+            SIZE=$(du -h "$APK" | cut -f1)
+            echo "### 构建成功" >> "$GITHUB_STEP_SUMMARY"
+            echo "- APK: \`$APK\`（$SIZE）" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 提交: \`$GITHUB_SHA\`（已写入 version-control-info）" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### 仅构建验证（无签名密钥）" >> "$GITHUB_STEP_SUMMARY"
+          fi

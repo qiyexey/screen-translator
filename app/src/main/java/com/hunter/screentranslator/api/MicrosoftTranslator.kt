@@ -24,7 +24,11 @@ class MicrosoftTranslator(
     private val client: OkHttpClient = HttpClients.standard
 ) : Translator {
 
-    override suspend fun translate(text: String, targetLang: String): Result<String> =
+    override suspend fun translate(
+        text: String,
+        targetLang: String,
+        sourceLang: String
+    ): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 if (text.isBlank()) return@runCatching ""
@@ -44,6 +48,13 @@ class MicrosoftTranslator(
                     .append("https://api.cognitive.microsofttranslator.com/translate")
                     .append("?api-version=3.0")
                     .append("&to=").append(target)
+
+                // v1.20.0：显式指定源语言时下发 `from`。
+                // 与 Google 同理 —— v3 也没有 "auto" 这个语言码，省略 from
+                // 就是自动检测；发 from=auto 会被判成非法语言（400）。
+                if (sourceLang != SOURCE_AUTO) {
+                    urlBuilder.append("&from=").append(msLangCode(sourceLang))
+                }
 
                 val req = Request.Builder()
                     .url(urlBuilder.toString())

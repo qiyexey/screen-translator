@@ -13,8 +13,10 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
 import com.hunter.screentranslator.databinding.ActivityVideoListenBinding
 import com.hunter.screentranslator.service.VideoListenService
+import com.hunter.screentranslator.util.EdgeToEdge
 
 /**
  * 听视频翻译控制页（v1.6.0）：
@@ -29,8 +31,9 @@ class VideoListenActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityVideoListenBinding.inflate(layoutInflater)
         setContentView(b.root)
+        EdgeToEdge.install(this)
 
-        b.btnBack.setOnClickListener { finish() }
+        b.topAppBar.setNavigationOnClickListener { finish() }
 
         // 模式选择（卡片高亮切换）
         // 修复（v1.9.1）：原先写死 #4CAF50 / #3A3A3F，浅色主题下亮绿描边对比不足、
@@ -43,7 +46,7 @@ class VideoListenActivity : AppCompatActivity() {
         }
         b.cardInternal.setOnClickListener {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                toast("内录模式需要 Android 10 及以上，请用麦克风模式")
+                toast(getString(R.string.video_listen_t09))
                 return@setOnClickListener
             }
             internalMode = true; refreshModeUi()
@@ -59,27 +62,35 @@ class VideoListenActivity : AppCompatActivity() {
         b.btnStart.setOnClickListener { start() }
         b.btnStop.setOnClickListener {
             VideoListenService.instance?.let { stopService(Intent(this, VideoListenService::class.java)) }
-            toast("已停止")
+            toast(getString(R.string.video_listen_t10))
             finish()
         }
     }
 
     private fun start() {
-        // Whisper Key 检查
+        // v1.20.0：Key 从"硬性前置条件"降级为"需要确认的提醒"。
+        // 自建/本地的 OpenAI 兼容语音服务不校验密钥，不该被拦；
+        // 但 baseUrl 指官方端点而忘填 Key 是最常见的配置疏漏，先问一次再放行。
         if (App.prefs.asrApiKey.isBlank()) {
             AlertDialog.Builder(this)
-                .setTitle("需要先配置语音识别 API")
+                .setTitle("没有填写语音识别 API Key")
                 .setMessage(
-                    "听视频翻译依赖 OpenAI 兼容的语音识别接口（Whisper）。\n\n" +
-                            "请回主界面 → 「语音识别（听视频用）」填入 API Key。\n\n" +
-                            "支持：OpenAI 官方、OpenAI 兼容中转、硅基流动等平台。"
+                    "即将连接：\n${App.prefs.asrBaseUrl}\n\n" +
+                            "如果是自己搭的免鉴权服务（本地 faster-whisper、whisper.cpp 等），" +
+                            "直接继续即可。\n" +
+                            "如果这里指的是 OpenAI 官方或需要密钥的中转，" +
+                            "请回主界面 → 「语音识别（听视频用）」填入 API Key，" +
+                            "否则会收到 401。"
                 )
-                .setPositiveButton("回去配置") { _, _ -> finish() }
+                .setPositiveButton("继续") { _, _ -> proceedStart() }
                 .setNegativeButton("取消", null)
                 .show()
             return
         }
+        proceedStart()
+    }
 
+    private fun proceedStart() {
         if (internalMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             // 内录：申请屏幕录制授权（AudioPlaybackCapture 复用 MediaProjection 授权）
             val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
@@ -106,10 +117,10 @@ class VideoListenActivity : AppCompatActivity() {
                     putExtra(VideoListenService.EXTRA_RESULT_DATA, data)
                 }
                 startForegroundService(intent)
-                toast("已开始，切到视频 App 看字幕")
+                toast(getString(R.string.video_listen_t11))
                 finish()
             } else {
-                toast("未授权屏幕录制，无法内录")
+                toast(getString(R.string.video_listen_t12))
             }
         }
     }
@@ -119,7 +130,7 @@ class VideoListenActivity : AppCompatActivity() {
         if (requestCode == REQ_MIC && grantResults.firstOrNull() == PackageManager.PERMISSION_GRANTED) {
             startService(internal = false)
         } else {
-            toast("需要麦克风权限")
+            toast(getString(R.string.video_listen_t13))
         }
     }
 
@@ -132,7 +143,7 @@ class VideoListenActivity : AppCompatActivity() {
         } else {
             startService(intent)
         }
-        toast("已开始，切到视频 App 看字幕")
+        toast(getString(R.string.video_listen_t11))
         finish()
     }
 

@@ -2,20 +2,23 @@ package com.hunter.screentranslator.ui
 
 import android.os.Bundle
 import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
-import android.widget.SeekBar
 import androidx.appcompat.app.AlertDialog
+import com.google.android.material.slider.Slider
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
 import com.hunter.screentranslator.api.LANG_DISPLAY
 import com.hunter.screentranslator.databinding.ActivityTtsSettingsBinding
+import com.hunter.screentranslator.util.EdgeToEdge
 import com.hunter.screentranslator.util.Speaker
 import com.hunter.screentranslator.util.TtsContent
 
 /**
  * v1.12.0 三级页：朗读（TTS）。
  *
- * 语速/音调用 SeekBar 0..15 映射 0.5~2.0（步进 0.1），与 Prefs 的 coerce 范围一致。
+ * 语速/音调用 M3 Slider 的档位 0..15 映射 0.5~2.0（步进 0.1），与 Prefs 的 coerce 范围一致。
+ *
+ * v1.19.0：SeekBar → Slider。Slider 的 value 越界会抛 IllegalStateException
+ * （SeekBar 只会静默钳到 max），所以下面两处初始化都显式 coerceIn(0f, 15f)。
  *
  * ⚠️ 拆页时的一处适配：原来的「试听 / 检测引擎」靠主页的 `spinnerTarget` 反查语言，
  * 那个下拉现在在[EngineSettingsActivity]里，本页取不到 —— 改为直接用已保存的
@@ -29,18 +32,19 @@ class TtsSettingsActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityTtsSettingsBinding.inflate(layoutInflater)
         setContentView(b.root)
-        b.btnBack.setOnClickListener { finish() }
+        EdgeToEdge.install(this)
+        b.topAppBar.setNavigationOnClickListener { finish() }
 
         setupTtsControls()
 
         b.btnSave.setOnClickListener {
             App.prefs.ttsAutoSpeak = b.swTtsAuto.isChecked
             // v1.9.5 修复语速"设 1.0 却偏快"：原来这里写的是 (progress + 10) / 10f，
-            // 而拖动监听用的是 (p + 5) / 10f —— 同一个 SeekBar 两套换算，
+            // 而拖动监听用的是 (p + 5) / 10f —— 同一个滑杆两套换算，
             // progress=5 时一个得 1.0、一个得 1.5，一点保存就快 50% 且标签不刷新。
-            App.prefs.ttsRate = (b.seekTtsRate.progress + 5) / 10f
-            App.prefs.ttsPitch = (b.seekTtsPitch.progress + 5) / 10f
-            toast("已保存")
+            App.prefs.ttsRate = (b.seekTtsRate.value.toInt() + 5) / 10f
+            App.prefs.ttsPitch = (b.seekTtsPitch.value.toInt() + 5) / 10f
+            toast(getString(R.string.common_t10))
         }
     }
 
@@ -50,60 +54,46 @@ class TtsSettingsActivity : BaseActivity() {
         // ---- 朗读内容：原文 / 译文 / 两者 ----
         val contentValues = TtsContent.OPTIONS.map { it.first }
         val contentLabels = TtsContent.OPTIONS.map { it.second }
-        b.spinnerTtsContent.adapter =
-            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, contentLabels)
-        b.spinnerTtsContent.setSelection(
-            contentValues.indexOf(App.prefs.ttsContent).coerceAtLeast(0)
-        )
-        b.spinnerTtsContent.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                App.prefs.ttsContent = contentValues[pos]
-                // 只有涉及原文时才需要选原文语言
-                applyTtsSourceLangVisibility()
-            }
-            override fun onNothingSelected(p: AdapterView<*>?) {}
+        b.spinnerTtsContent.setSimpleItems(contentLabels.toTypedArray())
+        setSel(b.spinnerTtsContent, contentValues.indexOf(App.prefs.ttsContent).coerceAtLeast(0))
+        b.spinnerTtsContent.setOnItemClickListener { _, _, pos, _ ->
+            App.prefs.ttsContent = contentValues[pos]
+            // 只有涉及原文时才需要选原文语言
+            applyTtsSourceLangVisibility()
         }
 
         // ---- 原文语言：自动 + 8 种目标语言（译文语言就是「目标语言」，不在此列）----
         val srcValues = listOf("auto") + LANG_DISPLAY.keys.toList()
         val srcLabels = listOf("自动判断（推荐）") +
                 LANG_DISPLAY.map { "${it.value} (${it.key})" }
-        b.spinnerTtsSourceLang.adapter =
-            ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, srcLabels)
-        b.spinnerTtsSourceLang.setSelection(
-            srcValues.indexOf(App.prefs.ttsSourceLang).coerceAtLeast(0)
-        )
-        b.spinnerTtsSourceLang.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(p: AdapterView<*>?, v: View?, pos: Int, id: Long) {
-                App.prefs.ttsSourceLang = srcValues[pos]
-            }
-            override fun onNothingSelected(p: AdapterView<*>?) {}
+        b.spinnerTtsSourceLang.setSimpleItems(srcLabels.toTypedArray())
+        setSel(b.spinnerTtsSourceLang, srcValues.indexOf(App.prefs.ttsSourceLang).coerceAtLeast(0))
+        b.spinnerTtsSourceLang.setOnItemClickListener { _, _, pos, _ ->
+            App.prefs.ttsSourceLang = srcValues[pos]
         }
         applyTtsSourceLangVisibility()
 
         // 语速：progress = rate*10 - 5（0.5→0, 1.0→5, 2.0→15）
-        b.seekTtsRate.progress = (App.prefs.ttsRate * 10).toInt() - 5
-        b.seekTtsRate.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+        b.seekTtsRate.value = ((App.prefs.ttsRate * 10).toInt() - 5).toFloat().coerceIn(0f, 15f)
+        b.seekTtsRate.addOnChangeListener(object : Slider.OnChangeListener {
+            override fun onValueChange(slider: Slider, value: Float, fromUser: Boolean) {
+                val p = value.toInt()
                 val rate = (p + 5) / 10f
                 App.prefs.ttsRate = rate
                 if (fromUser) b.tvTtsRateValue.text = String.format("%.1f×", rate)
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
         b.tvTtsRateValue.text = String.format("%.1f×", App.prefs.ttsRate)
 
         // 音调：同上
-        b.seekTtsPitch.progress = (App.prefs.ttsPitch * 10).toInt() - 5
-        b.seekTtsPitch.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(sb: SeekBar?, p: Int, fromUser: Boolean) {
+        b.seekTtsPitch.value = ((App.prefs.ttsPitch * 10).toInt() - 5).toFloat().coerceIn(0f, 15f)
+        b.seekTtsPitch.addOnChangeListener(object : Slider.OnChangeListener {
+            override fun onValueChange(slider: Slider, value: Float, fromUser: Boolean) {
+                val p = value.toInt()
                 val pitch = (p + 5) / 10f
                 App.prefs.ttsPitch = pitch
                 if (fromUser) b.tvTtsPitchValue.text = String.format("%.1f", pitch)
             }
-            override fun onStartTrackingTouch(sb: SeekBar?) {}
-            override fun onStopTrackingTouch(sb: SeekBar?) {}
         })
         b.tvTtsPitchValue.text = String.format("%.1f", App.prefs.ttsPitch)
 
@@ -113,7 +103,7 @@ class TtsSettingsActivity : BaseActivity() {
             val sample = TTS_SAMPLE[lang] ?: TTS_SAMPLE["en"]!!
             Speaker.speak(this, sample, lang) { ok, err ->
                 if (ok) {
-                    toast("正在朗读…")
+                    toast(getString(R.string.tts_settings_t09))
                 } else if (err != null) {
                     AlertDialog.Builder(this)
                         .setTitle("朗读不可用")

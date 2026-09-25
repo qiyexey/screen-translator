@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  备份 / 迁移规则（Android 12+ / API 31+）—— v1.18.0 新增。
+
+  与 backup_rules.xml 同源，只是 API 31 起换成了这个格式，并且把
+  「云备份」与「设备间直传」分开配置 —— 设备直传同样是数据出口，
+  两边都要排除，只排除云备份是个常见的漏配。
+
+  排除对象：screen_translator_secrets.xml（加密后的 API Key / Token）。
+  理由见 backup_rules.xml 的注释。
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="sharedpref" path="screen_translator_secrets.xml" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="sharedpref" path="screen_translator_secrets.xml" />
+    </device-transfer>
+</data-extraction-rules>

@@ -391,7 +391,7 @@ class ScreenReaderService : AccessibilityService() {
         OverlayService.update(text.take(300), "正在翻译…")
         // 每次取当前选择的引擎，切换引擎立即生效
         val translator = TranslatorFactory.current()
-        val result = translator.translate(text, App.prefs.targetLang)
+        val result = translator.translate(text, App.prefs.targetLang, App.prefs.sourceLang)
         var succeeded = false
         val translated = result.fold(
             onSuccess = { succeeded = true; it },

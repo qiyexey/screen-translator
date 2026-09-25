@@ -3,4 +3,615 @@
     <string name="accessibility_service_label">屏幕翻译</string>
     <string name="accessibility_service_desc">读取屏幕上显示的文字内容，并发送给AI翻译引擎进行实时翻译。支持划词翻译与悬浮球定点翻译。仅在用户启用时工作。</string>
     <string name="process_text_label">🌐 翻译</string>
+
+    <!--
+      v1.18.0：把清单里的 activity label 抽出来。
+
+      这些标题原来直接写死在 AndroidManifest 的 android:label 里。抽出来的理由：
+        · 清单属性无法被资源收缩以外的任何工具统一校对；
+        · 商店/系统在「最近任务」「应用详情」等位置会直接读这个 label，
+          它是最该走资源的一类文案；
+        · 为将来做多语言留出唯一入口 —— 现在只要新建 values-en/strings.xml 即可。
+
+      注意：工程里还有约 1000 条界面文案仍硬编码在 Kotlin / layout 中，
+      那是一次独立的大范围重构，本次只覆盖清单这一批（改动可控、零回归风险）。
+    -->
+    <string name="activity_image_translate">图片翻译</string>
+    <string name="activity_live_translate">实时屏幕翻译</string>
+    <string name="activity_camera_translate">拍照翻译</string>
+    <string name="activity_onboarding">使用引导</string>
+    <string name="activity_settings">设置</string>
+    <string name="activity_engine_settings">翻译引擎与密钥</string>
+    <string name="activity_trigger_settings">翻译触发方式</string>
+    <string name="activity_tts_settings">朗读译文</string>
+    <string name="activity_asr_settings">语音识别</string>
+    <string name="activity_ball_style">悬浮球与面板外观</string>
+    <string name="activity_permission">权限与保活</string>
+    <string name="activity_about">关于与用法</string>
+    <string name="activity_history">翻译历史</string>
+
+    <!-- ==================== 界面文案（v1.18.0 从 layout 抽离）=================== -->
+    <!-- 命名：单页独占 → <布局简称>_<id|序号>；多页共用 → common_<id|序号>。 -->
+
+    <!-- activity_about.xml -->
+    <string name="common_btn_back">‹ 返回</string>
+
+    <!-- activity_asr_settings.xml -->
+    <string name="common_btn_save">保存</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="common_btn_back_content_description">返回</string>
+    <string name="common_tv_engine_status">检查中…</string>
+
+    <!-- activity_main.xml -->
+    <string name="common_btn_settings_content_description">设置</string>
+
+    <!-- activity_asr_settings.xml -->
+    <string name="common_t01">Base URL（默认 api.openai.com/v1，可填中转）</string>
+
+    <!-- activity_about.xml -->
+    <string name="common_t02">关于与用法</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="common_t03">实时屏幕翻译</string>
+
+    <!-- activity_ball_style.xml -->
+    <string name="common_t04">悬浮球与面板外观</string>
+
+    <!-- activity_permission.xml -->
+    <string name="common_t05">权限与保活</string>
+
+    <!-- activity_settings.xml -->
+    <string name="common_t06">翻译触发方式</string>
+
+    <!-- activity_translate_input.xml -->
+    <string name="common_t07">译文</string>
+    <string name="common_tv_result">译文会显示在这里…</string>
+
+    <!-- activity_asr_settings.xml -->
+    <string name="common_t08">语音识别（听视频用）</string>
+
+    <!-- activity_ball_style.xml -->
+    <string name="common_t09">透明度</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t01">1. 先配好一个支持视觉的引擎（DeepSeek / OpenAI / Claude / 通义 / GLM / 豆包）；普通翻译引擎只有文字通道，送不了图。\n\n2. 点「开始实时翻译」→ 系统弹一次屏幕捕获授权（Android 14+ 每次会话都会弹，平台规定，绕不过）。\n\n3. 切到游戏/模拟器，从通知栏点「🔲 框选区域」，在游戏文字框上拖一个框。\n\n4. 之后画面里的文字一变就会被翻译，译文直接压在原文位置上。\n\n5. 从通知栏可暂停 / 停止；「已翻译 N 次」就是当前消耗的请求数。</string>
+
+    <!-- activity_video_listen.xml -->
+    <string name="video_listen_t01">1. 开始后切到要听的视频 App，屏幕顶部会出现字幕条\n\n2. 字幕条可拖动到不挡画面的位置，点 ✕ 结束\n\n3. 每句话停顿约 0.7 秒后出转写和翻译（同传级延迟）\n\n4. 依赖「语音识别 API」（主界面 → 语音识别设置），需 OpenAI 兼容的 Whisper 接口</string>
+
+    <!-- activity_asr_settings.xml -->
+    <string name="asr_settings_t01">API Key（OpenAI 兼容 / Whisper，自建服务可留空）</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t01">Azure 密钥 (Subscription Key)</string>
+    <string name="engine_settings_t02">Azure 门户创建「翻译」资源后获取密钥。每月 200 万字符免费额度</string>
+    <string name="engine_settings_t03">Base URL (默认 https://api.deepseek.com)</string>
+    <string name="engine_settings_t04">DeepL Auth Key（Free 版以 :fx 结尾）</string>
+
+    <!-- activity_settings.xml -->
+    <string name="settings_t01">Whisper 转写接口配置</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t02">• 视觉模型每轮请求有 1~3 秒延迟，所以剧情、对话、菜单够用，实时比赛里一闪而过的提示会跟不上。\n\n• 每次请求都计费。默认参数下，静止画面不会产生请求；请留意通知里的次数。\n\n• 只能用「支持视觉」的引擎；纯文本引擎会直接报错。\n\n• 屏幕旋转后选区会失效，需要重新框选（会提示）。\n\n• 设为 FLAG_SECURE 的应用（部分银行/流媒体）无法捕获，画面会是黑的。</string>
+
+    <!-- activity_translate_input.xml -->
+    <string name="translate_input_t01">⌨️ 输入翻译</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_btn_pause">⏸ 暂停</string>
+    <string name="live_translate_btn_stop">⏹ 停止</string>
+
+    <!-- activity_voice_translate.xml -->
+    <string name="voice_translate_tv_status">● 待机</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_btn_drag">✋ 拖动调整译文框位置</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t05">上下文长度</string>
+    <string name="engine_settings_btn_hy_mt_download">下载模型</string>
+    <string name="engine_settings_t06">下载源（同一份文件，实测速度差 12 倍）</string>
+
+    <!-- activity_ball_style.xml -->
+    <string name="ball_style_t01">个性化悬浮球与结果面板。双击悬浮球可进入框选翻译模式</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_tv_target_lang">中文（简体）</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_btn_hy_mt_import">从文件导入 gguf（自备模型）</string>
+
+    <!-- activity_video_listen.xml -->
+    <string name="video_listen_t02">使用说明</string>
+    <string name="video_listen_btn_stop">停止</string>
+
+    <!-- activity_trigger_settings.xml -->
+    <string name="trigger_settings_t01">全屏自动翻译</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_btn_engine_settings">切换翻译引擎 / 模型</string>
+
+    <!-- activity_trigger_settings.xml -->
+    <string name="trigger_settings_t02">划词翻译（选中文字即翻译）</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_btn_hy_mt_delete">删除文件</string>
+    <string name="engine_settings_t07">区域 Region（如 eastasia，global 可留空）</string>
+    <string name="engine_settings_btn_hy_mt_unload">卸载</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_switch_cover_mode">原位覆盖原文（会周期性闪烁）</string>
+
+    <!-- activity_tts_settings.xml -->
+    <string name="tts_settings_t01">原文语言</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t03">取帧间隔</string>
+
+    <!-- activity_trigger_settings.xml -->
+    <string name="trigger_settings_t03">只想用悬浮球定点翻译的话，只开「悬浮球」即可，其余都关掉</string>
+
+    <!-- activity_ball_style.xml -->
+    <string name="ball_style_t02">只调背景不调文字，调低后译文依然清晰</string>
+
+    <!-- activity_voice_translate.xml -->
+    <string name="voice_translate_t01">听到的原文</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_btn_video_listen">听视频</string>
+
+    <!-- activity_asr_settings.xml -->
+    <string name="asr_settings_t02">听视频翻译的转写引擎，走 OpenAI 兼容的 /v1/audio/transcriptions 接口。支持 OpenAI 官方、中转站、硅基流动（国内直连）等。注意 DeepSeek 没有语音识别接口。\n\n自建服务（本地 faster-whisper-server、whisper.cpp server 等）通常不校验密钥，此时 API Key 可以留空，只要把「接口地址」指向你的服务即可，例如 http://127.0.0.1:8000/v1 或 http://192.168.1.5:8000/v1。</string>
+
+    <!-- activity_settings.xml -->
+    <string name="settings_t02">四种用法说明与常见问题</string>
+
+    <!-- activity_about.xml -->
+    <string name="about_t01">四种用法：\n\n⚽ 悬浮球：把绿球拖到想翻译的文字上松手，即翻译该处；单击球收起/展开结果面板\n\n🔲 框选翻译：双击悬浮球进入框选模式，在屏幕上拖出矩形框，松手即翻译框内全部文字（单击空白处取消）\n\n🌐 划词翻译：任意应用里长按选中文字，0.5 秒后自动翻译（部分应用需从菜单选「🌐 翻译」）\n\n📋 复制即翻译：开启后，长按复制文字立即翻译\n\n其余步骤：\n1. 开启「无障碍服务」和「悬浮窗权限」\n2. 填写任一翻译引擎的密钥后保存\n3. 打开任意含外文的应用即可</string>
+
+    <!-- activity_permission.xml -->
+    <string name="permission_t01">国产手机还需手动加白名单：小米→应用设置→省电策略→无限制；华为→电池→应用启动管理→关闭自动管理；OPPO/vivo→电池→应用耗电管理→允许后台运行。设置后无障碍就不会再掉线</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_btn_image_translate_content_description">图片翻译</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t08">在 Google Cloud Console 启用 Cloud Translation API 后创建 API Key。注意大陆网络需自备访问条件</string>
+    <string name="engine_settings_t09">在 console.anthropic.com 获取。大陆网络需自备访问条件</string>
+    <string name="engine_settings_t10">在 deepl.com 注册 DeepL API Free 计划获取。Free 每月 50 万字符；key 以 :fx 结尾自动走免费端点</string>
+    <string name="engine_settings_t11">在 fanyi-api.baidu.com 注册获取。标准版每月 5 万字符免费，国内直连</string>
+    <string name="engine_settings_t12">在 open.bigmodel.cn 获取。glm-4-flash 免费调用，国内直连</string>
+    <string name="engine_settings_t13">在 platform.caiyunapp.com 申请。新用户 100 万字免费额度，国内直连</string>
+    <string name="engine_settings_t14">在阿里云百炼平台获取 Key，国内直连。新用户有免费 Token 额度</string>
+
+    <!-- activity_trigger_settings.xml -->
+    <string name="trigger_settings_t04">复制即翻译（监听剪贴板）</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_btn_hy_mt_copy_diag">复制诊断信息（设备指令集 / 线程 / 内存 / 延迟）</string>
+
+    <!-- activity_ball_style.xml -->
+    <string name="ball_style_t03">大小</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t15">大陆网络需自备访问条件，或填 OpenAI 兼容中转地址</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t04">字号</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t16">完全在本机运行 —— 无密钥、无额度、断网可用</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t05">宽度</string>
+    <string name="live_translate_tv_roi_status">尚未框选</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_t01">屏幕翻译</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t06">已知限制（如实说明）</string>
+
+    <!-- activity_permission.xml -->
+    <string name="permission_btn_enable_accessibility">开启</string>
+
+    <!-- activity_video_listen.xml -->
+    <string name="video_listen_btn_start">开始听视频翻译</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_btn_start">开始实时翻译</string>
+
+    <!-- activity_voice_translate.xml -->
+    <string name="voice_translate_btn_toggle">开始聆听</string>
+
+    <!-- activity_translate_input.xml -->
+    <string name="translate_input_tv_engine_info">引擎 · 目标语言</string>
+
+    <!-- activity_voice_translate.xml -->
+    <string name="voice_translate_btn_engine">引擎：系统</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t17">彩云 Token</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t07">怎么用</string>
+
+    <!-- activity_settings.xml -->
+    <string name="settings_t03">悬浮球 / 划词 / 全屏 / 复制 / 结果面板</string>
+
+    <!-- activity_ball_style.xml -->
+    <string name="ball_style_t04">悬浮球样式</string>
+
+    <!-- activity_trigger_settings.xml -->
+    <string name="trigger_settings_t05">悬浮球（拖到文字上松手即翻译）</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_t02">悬浮窗 </string>
+
+    <!-- activity_permission.xml -->
+    <string name="permission_t02">悬浮窗权限</string>
+
+    <!-- activity_trigger_settings.xml -->
+    <string name="trigger_settings_t06">所有页面自动翻译整屏：干扰大、费 API，慎开</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_btn_live_translate">打开</string>
+    <string name="main_btn_camera_translate_content_description">拍照翻译</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t18">换量化档后会自动重新加载；模型闲置 5 分钟或系统内存吃紧时会自动卸载。</string>
+    <string name="engine_settings_t19">推理线程</string>
+
+    <!-- activity_trigger_settings.xml -->
+    <string name="trigger_settings_t07">推荐：翻哪拖哪，不打扰</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_t03">无障碍 </string>
+
+    <!-- activity_settings.xml -->
+    <string name="settings_t04">无障碍、悬浮窗、防杀后台</string>
+
+    <!-- activity_permission.xml -->
+    <string name="permission_t03">无障碍服务</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t20">无需密钥，选中即用。</string>
+
+    <!-- activity_trigger_settings.xml -->
+    <string name="trigger_settings_t08">显示翻译结果面板</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t21">智谱 API Key</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_iv_last_crop_content_description">最近一次送出的图片</string>
+    <string name="live_translate_t08">最近一次送出的图（模型真正看到的）</string>
+
+    <!-- activity_tts_settings.xml -->
+    <string name="tts_settings_t02">朗读内容</string>
+
+    <!-- activity_settings.xml -->
+    <string name="settings_t05">朗读内容、语速、音调、引擎检测</string>
+
+    <!-- activity_tts_settings.xml -->
+    <string name="tts_settings_t03">朗读译文</string>
+
+    <!-- activity_settings.xml -->
+    <string name="settings_t06">朗读译文（TTS）</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_tv_run_status">未运行</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_btn_permission">权限与保活 ›</string>
+
+    <!-- activity_permission.xml -->
+    <string name="permission_t04">权限配置</string>
+
+    <!-- activity_tts_settings.xml -->
+    <string name="tts_settings_btn_tts_diag">检测语音引擎</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t22">模型/接入点 ID（ep-xxx，方舟控制台创建）</string>
+    <string name="engine_settings_t23">模型名 (默认 deepseek-chat)</string>
+    <string name="engine_settings_t24">模型在手机 CPU 上推理，译文不出设备。代价：比云端慢（首句还要多等几秒加载模型）、更耗电 —— 它是离线兜底，不是更快的那条路。\n\n图片翻译用不了它（纯文本模型），会自动走「本机 OCR 认字 → 本地翻译」。</string>
+    <string name="engine_settings_tv_hy_mt_status">模型状态：未下载</string>
+    <string name="engine_settings_t25">模型（默认 claude-3-5-haiku，便宜快速）</string>
+    <string name="engine_settings_t26">模型（默认 glm-4-flash，免费）</string>
+    <string name="engine_settings_t27">模型（默认 gpt-4o-mini）</string>
+    <string name="engine_settings_t28">模型（默认 qwen-plus，可选 qwen-turbo/qwen-max）</string>
+
+    <!-- activity_asr_settings.xml -->
+    <string name="asr_settings_t03">模型（默认 whisper-1）</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_tv_api_key_help">没有 API Key？点击前往 platform.deepseek.com 获取</string>
+    <string name="engine_settings_btn_test_translate">测试翻译（真调 API 验证 Key）</string>
+
+    <!-- activity_translate_input.xml -->
+    <string name="translate_input_btn_clear">清空</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_t04">游戏 / 模拟器：画面一出新文字就翻，译文贴在画面上。配「必应网页」引擎可走本机 OCR + 免费翻译。</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t29">火山引擎方舟平台创建推理接入点后，填 ep- 开头的接入点 ID。国内直连</string>
+    <string name="engine_settings_t30">火山方舟 ARK API Key</string>
+
+    <!-- activity_voice_translate.xml -->
+    <string name="voice_translate_tv_heard">点下方按钮开始，对着手机说话即可\n\n支持连续听写：停顿换气时出译文</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t09">点这里会先退到后台，你在游戏画面上拖出文字框即可。运行中也可以直接从通知栏点「框选区域」，不用切出游戏。</string>
+
+    <!-- activity_tts_settings.xml -->
+    <string name="tts_settings_t04">用系统语音引擎朗读。翻译结果面板上也会出现「🔊」按钮，长按它可快速切换朗读内容。</string>
+
+    <!-- activity_video_listen.xml -->
+    <string name="video_listen_t03">用麦克风收音，适合手机外放视频的场景。环境要安静、音量开大些；无 GMS 设备也能用（不依赖系统语音服务）</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t10">画面变化阈值（默认 1；换对白时实测 Δ 约 2~5，噪声为 0）</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t31">百度 AppID</string>
+    <string name="engine_settings_t32">百度密钥</string>
+    <!-- v1.20.0：源语言改为可选，文案不再写死「自动识别」。
+         编号取 t48+ —— t35~t38 早已被本页的「翻译引擎与密钥」标题、
+         微软/BingWeb 说明、量化档、百炼 Key 用掉了。
+         用「续号」而不是插空号：插空号会让后来者在 t34 和 t35 之间
+         再插一条时误以为 t35 是新的，重演一次重复定义。 -->
+    <string name="engine_settings_t48">源语言</string>
+    <string name="engine_settings_t49">译文语言</string>
+    <string name="engine_settings_t50">自动识别（推荐）</string>
+    <string name="engine_settings_t51">让模型自己判断原文语言。中日混排、纯短句偶尔会判错，判错时可以在这里手动指定。</string>
+    <string name="engine_settings_t33">目标语言（源语言自动识别）</string>
+
+    <!-- activity_video_listen.xml -->
+    <string name="video_listen_t04">直接采集系统正在播放的声音（视频/播客/直播），不受环境噪音影响，戴耳机也能用。需授权一次屏幕录制。部分 DRM 应用（如 Netflix）不允许内录</string>
+
+    <!-- activity_ball_style.xml -->
+    <string name="ball_style_t05">结果面板透明度</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t11">翻译区域</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_btn_history_content_description">翻译历史</string>
+
+    <!-- activity_tts_settings.xml -->
+    <string name="tts_settings_t05">翻译完成后自动朗读</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t34">翻译引擎</string>
+
+    <!-- activity_settings.xml -->
+    <string name="settings_t07">翻译引擎 · 语言 · 密钥</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t35">翻译引擎与密钥</string>
+
+    <!--
+      v1.22.0 必应网页引擎说明行（tvEngineNote）。
+      这三段原本写在引擎显示名里，把首页引擎胶囊和本页下拉框撑到截断，
+      因此搬到这里：名字只写「必应网页版」，风险说明由这一行承载。
+    -->
+    <!-- v1.22.0 语音页故障提示条上的「处理」按钮 -->
+    <string name="voice_translate_btn_fix">处理</string>
+
+    <string name="engine_settings_bing_web_note">免费、无需密钥，但走的是必应网页自用的非公开接口：只支持文字（图片翻译与实时屏幕翻译不可用），且随时可能因对方改版或限流失效，建议仅作兜底。</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_tv_panel_w_value">自动</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_tv_src_lang">自动检测</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t12">节奏与省额度</string>
+
+    <!-- activity_voice_translate.xml -->
+    <!-- v1.20.0：原来是 btnLang 的文字，该按钮已换成 spinnerLang 下拉框。
+         编号取 t09（t08 已被「需要麦克风权限才能语音识别」占用）。 -->
+    <string name="voice_translate_t09">识别语言</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t13">译文位置微调（叠层和框选位置对不上时用）</string>
+    <string name="live_translate_switch_touchable">译文叠层可触摸（默认关）</string>
+    <string name="live_translate_t14">译文面板外观</string>
+
+    <!-- activity_tts_settings.xml -->
+    <string name="tts_settings_btn_tts_test">试听（朗读当前目标语言示例）</string>
+    <string name="tts_settings_t06">语速（0.5× ~ 2.0×）</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_btn_voice_translate_content_description">语音翻译</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t36">⚠️ 非公开接口，随时可能失效：微软一改版或开始限流就会失败（会如实报错，不假装成功）。\n\n它走 bing.com/translator 网页自用的接口，免密钥、免费，但只适合当兜底选项，不建议当主力引擎。\n\n注意：它只能翻文字。实时屏幕翻译要把截图交给能读图的模型，所以那个功能用不了这个引擎。</string>
+    <string name="engine_settings_btn_hy_mt_bench">跑一次基准（5 句，结果写进诊断信息）</string>
+
+    <!-- activity_main.xml -->
+    <string name="main_btn_input_translate">输入或粘贴文字</string>
+
+    <!-- activity_translate_input.xml -->
+    <string name="translate_input_t02">输入或粘贴文字，停顿即自动翻译（源语言自动识别）</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t15">运行状态</string>
+    <string name="live_translate_t16">这张图就是模型真正看到的内容。它里面不是你要翻译的那段文字 → 选区/坐标问题；确实是那段文字但译文对不上 → 模型读错或编造（已在 v1.15.6 收紧提示词）。</string>
+
+    <!-- activity_settings.xml -->
+    <string name="settings_t08">选引擎、填 Key、设目标语言</string>
+    <string name="settings_t09">透明度、大小、颜色</string>
+
+    <!-- activity_video_listen.xml -->
+    <string name="video_listen_t05">采集方式</string>
+
+    <!-- activity_about.xml -->
+    <string name="about_btn_show_onboarding">重新查看使用引导</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t37">量化档（越大越准、越慢、越占内存）</string>
+
+    <!-- activity_permission.xml -->
+    <string name="permission_t05">防止服务被杀（推荐设置一次）</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_t38">阿里云百炼 API Key (sk-...)</string>
+
+    <!-- activity_tts_settings.xml -->
+    <string name="tts_settings_t07">音调（0.5 ~ 2.0）</string>
+
+    <!-- activity_engine_settings.xml -->
+    <string name="engine_settings_btn_hy_mt_preload">预加载</string>
+
+    <!-- activity_ball_style.xml -->
+    <string name="ball_style_t06">颜色</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_t17">高度</string>
+    <string name="live_translate_t18">默认关：叠层不吃触摸，免得把游戏的操作区变哑。打开后叠层会拦住那一块的点击。</string>
+    <string name="live_translate_t19">默认关：译文贴在选区外侧，不遮挡原文，所以完全不闪。打开后译文会盖在原文上（观感更接近原生汉化），但为了拍到下面的游戏画面，叠层必须周期性隐藏，因此会闪。二选一，按需取舍。</string>
+
+    <!-- activity_video_listen.xml -->
+    <string name="video_listen_t06">🎙️ 麦克风模式（任何设备）</string>
+
+    <!-- activity_voice_translate.xml -->
+    <string name="voice_translate_t02">🎤 语音翻译</string>
+
+    <!-- activity_video_listen.xml -->
+    <string name="video_listen_t07">🎧 听视频翻译</string>
+    <string name="video_listen_t08">🔊 内录模式（推荐，Android 10+）</string>
+
+    <!-- activity_tts_settings.xml -->
+    <string name="tts_settings_t08">🔊 朗读</string>
+
+    <!-- activity_live_translate.xml -->
+    <string name="live_translate_btn_ocr_test">🔍 OCR 自检（本机能不能认出日文）</string>
+    <string name="live_translate_btn_pick_roi">🔲 框选翻译区域</string>
+
+    <!-- ==================== Kotlin 文案（v1.18.0 抽离）=================== -->
+    <!-- 仅含纯字面量；带 $ 插值或 \n 转义的仍留在代码里，需人工改 getString(id, args)。 -->
+    <string name="common_t10">已保存</string>
+    <string name="common_t11">正在翻译…</string>
+    <string name="voice_translate_t03">● 处理中…</string>
+    <string name="voice_translate_t04">● 正在翻译…</string>
+    <string name="voice_translate_t05">● 正在聆听（Whisper · 停顿断句）</string>
+    <string name="voice_translate_t06">● 正在转写…</string>
+    <string name="engine_settings_t39">下载完成，正在校验 sha256（1GB 约十几秒）…</string>
+    <string name="base_t01">你的 ROM 不支持自动跳转，请到电池设置里手动添加</string>
+    <string name="voice_translate_t07">先停止再切换引擎</string>
+    <string name="video_listen_t09">内录模式需要 Android 10 及以上，请用麦克风模式</string>
+    <string name="image_translate_t01">图片编码失败</string>
+    <string name="image_translate_t02">在图上拖动框选要翻译的区域，松手即翻译。</string>
+    <string name="roi_picker_t01">在画面上拖出要翻译的文字区域</string>
+    <string name="video_listen_t10">已停止</string>
+    <string name="live_translate_t20">已停止实时翻译</string>
+    <string name="engine_settings_t40">已删除</string>
+    <string name="engine_settings_t41">已卸载模型，内存已释放</string>
+    <string name="history_t01">已复制译文</string>
+    <string name="live_translate_t21">已开始 · 请切到游戏，再从通知栏点「框选区域」</string>
+    <string name="video_listen_t11">已开始，切到视频 App 看字幕</string>
+    <string name="history_t02">已清空（收藏保留）</string>
+    <string name="base_t02">已设置忽略电池优化 ✅</string>
+    <string name="permission_t06">悬浮窗已启动</string>
+    <string name="image_translate_t03">截图失败。可能是系统限制了截屏，请重试。</string>
+    <string name="camera_translate_t01">整段翻译中（一次请求，带上下文）…</string>
+    <string name="camera_translate_t02">未授予相机权限。可到 系统设置 → 应用 → 屏幕翻译 → 权限 里开启</string>
+    <string name="video_listen_t12">未授权屏幕录制，无法内录</string>
+    <string name="live_translate_t22">未授权屏幕捕获，无法开始</string>
+    <string name="image_translate_t04">未获得截图授权。图片翻译需要该权限才能读取屏幕内容。</string>
+    <string name="image_translate_t05">本机识别中（不走网络）…</string>
+    <string name="engine_settings_t42">模型已加载，可以开始翻译了</string>
+    <string name="engine_settings_t43">正在加载模型到内存…（首次约几秒）</string>
+    <string name="camera_translate_t03">正在处理上一张，请稍候</string>
+    <string name="camera_translate_t04">正在处理，请稍候</string>
+    <string name="engine_settings_t44">正在导入…</string>
+    <string name="image_translate_t06">正在抓取屏幕…</string>
+    <string name="tts_settings_t09">正在朗读…</string>
+    <string name="image_translate_t07">正在申请屏幕截图权限…</string>
+    <string name="image_translate_t08">正在翻译中，请稍候</string>
+    <string name="history_t03">没有可导出的记录</string>
+    <string name="camera_translate_t05">没有相机权限，无法拍照</string>
+    <string name="engine_settings_t45">测试中…</string>
+    <string name="camera_translate_t06">相机还没就绪</string>
+    <string name="translate_input_t03">翻译失败，请检查引擎配置</string>
+    <string name="image_translate_t09">翻译完成。可点「🔊 朗读」或重新框选。</string>
+    <string name="image_translate_t10">裁切失败，请重试</string>
+    <string name="engine_settings_t46">诊断信息已复制，可直接发给开发者</string>
+    <string name="engine_settings_t47">请先授予悬浮窗权限（测试结果会显示在悬浮窗）</string>
+    <string name="live_translate_t23">请先点「开始实时翻译」</string>
+    <string name="camera_translate_t07">还没有可朗读的内容</string>
+    <string name="camera_translate_t08">还没识别到文字</string>
+    <string name="camera_translate_t09">这里没识别到文字，点在文字上试试</string>
+    <string name="roi_picker_t02">选区不合法，请重画</string>
+    <string name="image_translate_t11">选区太小，请拖出一个更大的框</string>
+    <!-- v1.25.0 相册选图：把"选图"做成与"截屏"并列的一等来源 -->
+    <string name="image_translate_btn_gallery">从相册选择</string>
+    <string name="image_translate_btn_capture">截取屏幕</string>
+    <string name="image_translate_t13">点「从相册选择」挑一张图，或点「截取屏幕」翻译当前画面。</string>
+    <string name="image_translate_t14">正在读取图片…</string>
+    <string name="image_translate_t15">这张图片读不出来，可能已被删除或无权访问，换一张试试。</string>
+    <!-- v1.25.0 译文原位覆盖：默认把每行译文盖回原文位置，可切回框选 -->
+    <string name="image_translate_btn_full">翻译整张图</string>
+    <string name="image_translate_btn_whole">📄 全文</string>
+    <string name="image_translate_mode_overlay">显示方式：译文盖在原文上（点这里切「框选翻译」）</string>
+    <string name="image_translate_mode_region">显示方式：框选区域翻译（点这里切「译文盖在原文上」）</string>
+    <string name="image_translate_t16">正在识别文字（本机完成，不联网）…</string>
+    <string name="image_translate_t17">没识别到文字。换一张更清晰的图，或切到「框选翻译」手动框一块。</string>
+    <string name="image_translate_t18">已就地翻译 %1$d/%2$d 行</string>
+    <string name="image_translate_t19">（%1$d 行失败）</string>
+    <string name="image_translate_t20"> · 点某一行可单独翻译，按住屏幕看原文</string>
+    <string name="image_translate_t21">这一行翻译失败，可点「📄 全文」整段再试</string>
+    <string name="image_translate_t22">已就地翻译 · 点其他行可继续 · 按住屏幕看原文</string>
+    <string name="image_translate_t23">按住查看原文 · 松开显示译文</string>
+    <string name="image_translate_t24">点一行字即可就地翻译，按住屏幕可看原文</string>
+    <string name="image_translate_t25">已切到「译文盖在原文上」：选图后自动逐行贴合，点某一行可单独翻。</string>
+    <string name="image_translate_t26">识别到 %1$d 行 · 整屏逐行贴合中…</string>
+    <string name="image_translate_t27">还没有可翻译的文字，先选一张图或在图上框一块</string>
+    <string name="image_translate_t28">整段翻译中（一次请求，带上下文）…</string>
+    <string name="image_translate_t29">整段翻译完成，已在下方显示。</string>
+    <string name="image_translate_t30">这里没识别到文字，点在文字上试试</string>
+    <string name="camera_translate_t10">需要相机权限才能拍照翻译</string>
+    <string name="video_listen_t13">需要麦克风权限</string>
+    <string name="voice_translate_t08">需要麦克风权限才能语音识别</string>
+
+    <!-- v1.21.0 首页视觉重构：把高频选择前移，不再全塞进设置 -->
+    <string name="main_engine_label">当前翻译引擎</string>
+    <string name="main_engine_value">%1$s</string>
+    <string name="main_engine_action">切换或配置</string>
+    <string name="main_section_quick">快速翻译</string>
+    <string name="main_quick_image">图片</string>
+    <string name="main_quick_camera">拍照</string>
+    <string name="main_quick_voice">语音</string>
+    <string name="main_live_badge">核心功能</string>
+    <string name="main_live_title">实时屏幕翻译</string>
+    <string name="main_live_desc">框选屏幕区域，画面出现新文字时自动翻译并贴回原位。</string>
+    <string name="main_live_action">开始实时翻译</string>
+    <string name="main_video_title">听视频</string>
+    <string name="main_video_desc">把视频声音转成双语字幕</string>
+    <string name="main_permission_title">运行状态</string>
+    <string name="main_permission_action">检查权限</string>
+    <string name="main_accessibility_label">无障碍服务</string>
+    <string name="main_overlay_label">悬浮窗权限</string>
+    <string name="main_swap_language_content_description">交换源语言与目标语言</string>
+
+    <!-- v1.21.0 设置页：从七张同权重卡片重组为四个语义分区 -->
+    <string name="settings_section_translation">翻译体验</string>
+    <string name="settings_section_voice">声音</string>
+    <string name="settings_section_system">外观与系统</string>
+    <string name="settings_section_other">其他</string>
+    <string name="settings_engine_title">翻译引擎与密钥</string>
+    <string name="settings_engine_summary">%1$s · 点此切换或配置</string>
+    <string name="settings_trigger_summary">%1$d 项触发方式已开启</string>
+    <string name="settings_tts_summary_on">已开启自动朗读 · 可调语速与音调</string>
+    <string name="settings_tts_summary_off">按需朗读 · 可调语速与音调</string>
+    <string name="settings_asr_summary_ready">已配置语音识别接口</string>
+    <string name="settings_asr_summary_missing">未配置 · 语音页会直接引导</string>
+    <string name="settings_ball_summary">%1$ddp · %2$d%% 不透明度</string>
+    <string name="settings_permission_summary_ready">关键权限已就绪</string>
+    <string name="settings_permission_summary_missing">有权限未开启 · 点此修复</string>
+
 </resources>

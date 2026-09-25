@@ -22,7 +22,11 @@ class DeepLTranslatorEngine(
     private val client: OkHttpClient = HttpClients.standard
 ) : Translator {
 
-    override suspend fun translate(text: String, targetLang: String): Result<String> =
+    override suspend fun translate(
+        text: String,
+        targetLang: String,
+        sourceLang: String
+    ): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 if (text.isBlank()) return@runCatching ""
@@ -39,16 +43,26 @@ class DeepLTranslatorEngine(
 
                 val target = deeplLangCode(targetLang)
 
-                val form = FormBody.Builder()
+                val formBuilder = FormBody.Builder()
                     .add("text", text)
                     .add("target_lang", target)
-                    .build()
+
+                // v1.20.0：显式指定源语言时下发 source_lang（DeepL 也是全大写）。
+                // DeepL 不接受 "auto"，只有省略 source_lang 才是自动检测。
+                // 注意 DeepL 的源语言表**比目标语言表窄**：它不支持把 zh 当源语言
+                // 之外的所有组合，但支持的具体集合随计划变动，所以这里不做白名单 ——
+                // 若用户选了 DeepL 不支持的源语言，它会回一个带 error message 的
+                // 4xx，被下面的 !resp.isSuccessful 分支原样转成可读错误，
+                // 比我们在这里维护一张会过期的表更可靠。
+                if (sourceLang != SOURCE_AUTO) {
+                    formBuilder.add("source_lang", deeplLangCode(sourceLang))
+                }
 
                 val req = Request.Builder()
                     .url(endpoint)
                     .header("Authorization", "DeepL-Auth-Key $apiKey")
                     .header("Content-Type", "application/x-www-form-urlencoded")
-                    .post(form)
+                    .post(formBuilder.build())
                     .build()
 
                 client.newCall(req).execute().use { resp ->

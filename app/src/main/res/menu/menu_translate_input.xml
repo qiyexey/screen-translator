@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  输入翻译页的 app bar 动作（v1.19.0）。
+  原来"清空"是顶栏里的一个 MaterialButton，占着一整块宽度；
+  M3 里工具栏动作用 menu 表达，文字按钮直接显示在标题栏右侧。
+-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_clear"
+        android:title="@string/translate_input_btn_clear"
+        app:showAsAction="always" />
+
+</menu>

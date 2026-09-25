@@ -1,8 +1,12 @@
 package com.hunter.screentranslator
 
+import android.app.Activity
 import android.app.Application
 import android.content.ComponentCallbacks2
+import android.os.Bundle
 import com.hunter.screentranslator.api.HyMtRuntime
+import com.hunter.screentranslator.service.OverlayService
+import com.hunter.screentranslator.util.CrashLog
 import com.hunter.screentranslator.util.HistoryStore
 import com.hunter.screentranslator.util.Prefs
 import com.hunter.screentranslator.util.TranslationCache
@@ -10,12 +14,46 @@ import com.hunter.screentranslator.util.TranslationCache
 class App : Application() {
     override fun onCreate() {
         super.onCreate()
+
+        // v1.18.0：**最先**装崩溃兜底。放在所有其它初始化之前 ——
+        // 它要捕获的恰恰就是"初始化阶段崩了"这种情况，晚一行就少一行的覆盖。
+        CrashLog.init(this)
+
         instance = this
         prefs = Prefs(this)
+
+        // v1.21.0：悬浮球只服务于“跨应用翻译”，本应用自己的页面前台时自动隐藏。
+        // 用 started Activity 计数而不是在 BaseActivity.onResume/onPause 里直接切：
+        // A Activity 打开 B Activity 时会交错调用生命周期，直接切会在两页之间闪一下；
+        // started 计数在内部页面跳转时始终 > 0，只有整个应用退到后台才恢复悬浮球。
+        var startedActivities = 0
+        registerActivityLifecycleCallbacks(object : ActivityLifecycleCallbacks {
+            override fun onActivityStarted(activity: Activity) {
+                startedActivities++
+                if (startedActivities == 1) OverlayService.setOwnAppForeground(true)
+            }
+
+            override fun onActivityStopped(activity: Activity) {
+                startedActivities = (startedActivities - 1).coerceAtLeast(0)
+                if (startedActivities == 0) OverlayService.setOwnAppForeground(false)
+            }
+
+            override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) = Unit
+            override fun onActivityResumed(activity: Activity) = Unit
+            override fun onActivityPaused(activity: Activity) = Unit
+            override fun onActivitySaveInstanceState(activity: Activity, outState: Bundle) = Unit
+            override fun onActivityDestroyed(activity: Activity) = Unit
+        })
+
         // v1.8.0：初始化翻译历史存储（需要 Context 定位 filesDir）
         HistoryStore.init(this)
         // v1.10.0：初始化翻译缓存并后台预载（避免首次翻译时在调用线程上读盘）
         TranslationCache.init(this)
+
+        // v1.18.0：把 v1.17.0 及以前留在旧 prefs 里的明文 API Key 迁到加密存储。
+        // 幂等；失败也只是这次没迁成，不会丢数据（见 Prefs.migrateSecrets）。
+        runCatching { prefs.migrateSecrets() }
+            .onFailure { android.util.Log.w("App", "secret migration skipped", it) }
 
         // v1.2.0 一次性迁移：全屏自动翻译改为默认关（干扰大、费 API）
         if (!prefs.migratedV12) {

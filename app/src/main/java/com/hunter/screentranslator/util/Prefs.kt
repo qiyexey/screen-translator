@@ -2,19 +2,119 @@ package com.hunter.screentranslator.util
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
+import com.hunter.screentranslator.api.SOURCE_AUTO
 
 /**
  * 偏好设置封装。
  * v1.1.0 新增：划词翻译、悬浮球模式、复制即翻译。
+ * v1.18.0：API Key / Token 改为经 AndroidKeyStore 加密后存储（见 [SecretStore]）。
  */
 class Prefs(context: Context) {
 
     private val sp: SharedPreferences =
         context.getSharedPreferences("screen_translator", Context.MODE_PRIVATE)
 
+    /**
+     * 密钥专用文件（v1.18.0）。
+     *
+     * 与 [sp] 分开的理由不是"更好看"，而是**备份排除必须能按文件生效** ——
+     * `res/xml/backup_rules.xml` 与 `res/xml/data_extraction_rules.xml` 是按
+     * SharedPreferences 文件名排除的。混在同一个文件里就只能"要么全备份、
+     * 要么全不备份"，而用户的历史与设置是值得备份的。
+     */
+    private val spSecret: SharedPreferences =
+        context.getSharedPreferences(SECRET_FILE, Context.MODE_PRIVATE)
+
+    /**
+     * 读敏感值（v1.18.0）。四级回退，保证升级不丢配置：
+     *
+     * 1. 密钥文件里的密文 → 解密；
+     * 2. 密钥文件里的明文（Keystore 不可用时的降级写入）；
+     * 3. 旧文件 `screen_translator.xml` 里的明文（v1.17.0 及以前）；
+     * 4. 默认值。
+     *
+     * 第 2、3 步都不是多余的：第 2 步是 Keystore 不可用时的正常路径，
+     * 第 3 步是升级路径 —— 少了它，老用户升上来会看到所有密钥变成空。
+     */
+    private fun getSecret(key: String, def: String = ""): String {
+        spSecret.getString(key, null)?.let { raw ->
+            if (!SecretStore.isEncrypted(raw)) return raw
+            SecretStore.decrypt(raw)?.let { return it }
+            // 解不开（换机 / 清数据）→ 当它不存在，继续往下找
+        }
+        return sp.getString(key, def) ?: def
+    }
+
+    /**
+     * 写敏感值（v1.18.0）。
+     *
+     * 加密不可用时**退回明文写进密钥文件**，而不是拒绝写入 ——
+     * 写不进去等于"用户填了密钥但翻译永远失败"，那是更糟的失败模式。
+     * 降级这件事通过 [secretStorageDegraded] 暴露给「诊断信息」，不静默假装成功。
+     */
+    private fun putSecret(key: String, value: String) {
+        val enc = SecretStore.encrypt(value)
+        spSecret.edit().apply {
+            if (enc != null) putString(key, enc) else putString(key, value)
+        }.apply()
+        // 顺手清掉旧文件里的明文，避免"改了密钥但旧明文还留在那儿"
+        if (sp.contains(key)) sp.edit().remove(key).apply()
+    }
+
+    /** 密钥存储是否已降级为明文（供「诊断信息」展示，不静默）。 */
+    fun secretStorageDegraded(): Boolean = SecretStore.unavailable
+
+    /**
+     * 按"偏好键"直接读一个字符串值（v1.26.0）。
+     *
+     * 用途只有一个：给 [com.hunter.screentranslator.api.engineReadiness] 当取值器。
+     * 那套判据要一次判断**所有**引擎是否配好（引导页要展示"当前引擎是否可用"，
+     * 语音页要在开录前预检），而各引擎的密钥散在不同字段上；走一遍
+     * `if (engine == DEEPSEEK) prefs.apiKey else if (...)` 的写法，
+     * 等于把那 12 个分支在三个页面各写一遍。
+     *
+     * 敏感字段会走 [getSecret]（加密存储 + 旧明文回退），
+     * 其余走普通 SharedPreferences —— 判据本身与"存哪儿"无关，但读法必须一致，
+     * 否则会出现"设置页显示已配置、引导页说没配置"的矛盾。
+     *
+     * 未知键返回空串，**不抛异常**：判据函数对未知引擎就应得出"没配"，
+     * 而不是把整个页面带崩。
+     */
+    fun raw(key: String): String =
+        if (key in SENSITIVE_KEYS) getSecret(key) else sp.getString(key, "") ?: ""
+
+    /**
+     * 把 v1.17.0 及以前留在旧文件里的明文密钥迁到加密文件（v1.18.0）。
+     *
+     * 幂等：迁移过的键在旧文件里已被删除，下次进来 `sp.contains` 就是 false。
+     * 在 `App.onCreate` 里跑一次。
+     *
+     * 注意：加密失败（Keystore 不可用）时**保留明文不动**，下次启动再试 ——
+     * 而不是"删掉明文但没写进密文"，那等于直接丢密钥。
+     */
+    fun migrateSecrets() {
+        val pending = SENSITIVE_KEYS.filter { sp.contains(it) }
+        if (pending.isEmpty()) return
+        var moved = 0
+        pending.forEach { key ->
+            val plain = sp.getString(key, null)
+            if (plain.isNullOrEmpty()) {
+                sp.edit().remove(key).apply()
+                return@forEach
+            }
+            val enc = SecretStore.encrypt(plain) ?: return@forEach
+            spSecret.edit().putString(key, enc).apply()
+            sp.edit().remove(key).apply()
+            moved++
+        }
+        if (moved > 0) Log.i(TAG, "migrated $moved plaintext secret(s) to encrypted store")
+    }
+
+    /** DeepSeek（默认引擎）API Key —— v1.18.0 起加密存储 */
     var apiKey: String
-        get() = sp.getString(KEY_API_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_API_KEY, value).apply()
+        get() = getSecret(KEY_API_KEY)
+        set(value) = putSecret(KEY_API_KEY, value)
 
     var baseUrl: String
         get() = sp.getString(KEY_BASE_URL, "https://api.deepseek.com") ?: "https://api.deepseek.com"
@@ -31,13 +131,13 @@ class Prefs(context: Context) {
 
     /** Google Cloud Translation API Key */
     var googleApiKey: String
-        get() = sp.getString(KEY_GOOGLE_API_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_GOOGLE_API_KEY, value).apply()
+        get() = getSecret(KEY_GOOGLE_API_KEY)
+        set(value) = putSecret(KEY_GOOGLE_API_KEY, value)
 
     /** 微软 Azure Translator 密钥 */
     var msApiKey: String
-        get() = sp.getString(KEY_MS_API_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_MS_API_KEY, value).apply()
+        get() = getSecret(KEY_MS_API_KEY)
+        set(value) = putSecret(KEY_MS_API_KEY, value)
 
     /** 微软区域（如 eastasia、southeastasia；global 可留空）*/
     var msRegion: String
@@ -46,13 +146,13 @@ class Prefs(context: Context) {
 
     /** DeepL Auth Key（Free 计划以 :fx 结尾）*/
     var deeplApiKey: String
-        get() = sp.getString(KEY_DEEPL_API_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_DEEPL_API_KEY, value).apply()
+        get() = getSecret(KEY_DEEPL_API_KEY)
+        set(value) = putSecret(KEY_DEEPL_API_KEY, value)
 
     /** OpenAI：API Key / Base URL / 模型 */
     var openaiApiKey: String
-        get() = sp.getString(KEY_OPENAI_API_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_OPENAI_API_KEY, value).apply()
+        get() = getSecret(KEY_OPENAI_API_KEY)
+        set(value) = putSecret(KEY_OPENAI_API_KEY, value)
 
     var openaiBaseUrl: String
         get() = sp.getString(KEY_OPENAI_BASE_URL, "https://api.openai.com/v1") ?: "https://api.openai.com/v1"
@@ -64,8 +164,8 @@ class Prefs(context: Context) {
 
     /** Claude */
     var claudeApiKey: String
-        get() = sp.getString(KEY_CLAUDE_API_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_CLAUDE_API_KEY, value).apply()
+        get() = getSecret(KEY_CLAUDE_API_KEY)
+        set(value) = putSecret(KEY_CLAUDE_API_KEY, value)
 
     var claudeModel: String
         get() = sp.getString(KEY_CLAUDE_MODEL, "claude-3-5-haiku-20241022") ?: "claude-3-5-haiku-20241022"
@@ -73,8 +173,8 @@ class Prefs(context: Context) {
 
     /** 通义千问 */
     var qwenApiKey: String
-        get() = sp.getString(KEY_QWEN_API_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_QWEN_API_KEY, value).apply()
+        get() = getSecret(KEY_QWEN_API_KEY)
+        set(value) = putSecret(KEY_QWEN_API_KEY, value)
 
     var qwenModel: String
         get() = sp.getString(KEY_QWEN_MODEL, "qwen-plus") ?: "qwen-plus"
@@ -82,8 +182,8 @@ class Prefs(context: Context) {
 
     /** 智谱 GLM */
     var glmApiKey: String
-        get() = sp.getString(KEY_GLM_API_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_GLM_API_KEY, value).apply()
+        get() = getSecret(KEY_GLM_API_KEY)
+        set(value) = putSecret(KEY_GLM_API_KEY, value)
 
     var glmModel: String
         get() = sp.getString(KEY_GLM_MODEL, "glm-4-flash") ?: "glm-4-flash"
@@ -91,8 +191,8 @@ class Prefs(context: Context) {
 
     /** 火山豆包（模型填推理接入点 ep-xxx）*/
     var doubaoApiKey: String
-        get() = sp.getString(KEY_DOUBAO_API_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_DOUBAO_API_KEY, value).apply()
+        get() = getSecret(KEY_DOUBAO_API_KEY)
+        set(value) = putSecret(KEY_DOUBAO_API_KEY, value)
 
     var doubaoModel: String
         get() = sp.getString(KEY_DOUBAO_MODEL, "") ?: ""
@@ -100,17 +200,17 @@ class Prefs(context: Context) {
 
     /** 百度翻译：AppID + 密钥 */
     var baiduAppId: String
-        get() = sp.getString(KEY_BAIDU_APP_ID, "") ?: ""
-        set(value) = sp.edit().putString(KEY_BAIDU_APP_ID, value).apply()
+        get() = getSecret(KEY_BAIDU_APP_ID)
+        set(value) = putSecret(KEY_BAIDU_APP_ID, value)
 
     var baiduKey: String
-        get() = sp.getString(KEY_BAIDU_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_BAIDU_KEY, value).apply()
+        get() = getSecret(KEY_BAIDU_KEY)
+        set(value) = putSecret(KEY_BAIDU_KEY, value)
 
     /** 彩云小译 Token */
     var caiyunToken: String
-        get() = sp.getString(KEY_CAIYUN_TOKEN, "") ?: ""
-        set(value) = sp.edit().putString(KEY_CAIYUN_TOKEN, value).apply()
+        get() = getSecret(KEY_CAIYUN_TOKEN)
+        set(value) = putSecret(KEY_CAIYUN_TOKEN, value)
 
     // ---- v1.17.0 本地大模型（腾讯 Hy-MT2-1.8B，端侧 llama.cpp）----
 
@@ -143,6 +243,20 @@ class Prefs(context: Context) {
     var targetLang: String
         get() = sp.getString(KEY_TARGET_LANG, "zh") ?: "zh"
         set(value) = sp.edit().putString(KEY_TARGET_LANG, value).apply()
+
+    /**
+     * 源语言代码：`auto`（自动识别）或 zh / en / ja / ko ...
+     *
+     * v1.20.0：此前源语言是写死的 —— 六家传统机翻（Google/微软/DeepL/百度/Bing/彩云）
+     * 都把 from 位硬编码成 auto，五条大模型提示词里也写死了「自动识别原文语言」。
+     * 自动识别猜错的代价不小：中日混排会被判成日语、纯英文短句偶尔被判成荷兰语，
+     * 而猜错之后目标语言再对也是白搭。这里给用户一个显式的兜底开关。
+     *
+     * 默认 [SOURCE_AUTO]，行为与 v1.19.0 完全一致 —— 老用户升级后译文不会突然变化。
+     */
+    var sourceLang: String
+        get() = sp.getString(KEY_SOURCE_LANG, SOURCE_AUTO) ?: SOURCE_AUTO
+        set(value) = sp.edit().putString(KEY_SOURCE_LANG, value).apply()
 
     /** 全屏自动翻译（屏幕变化即翻译整个界面）。v1.2.0 起默认关闭——干扰大且费 API。*/
     var autoTranslate: Boolean
@@ -212,8 +326,8 @@ class Prefs(context: Context) {
 
     /** 语音识别（ASR）：OpenAI 兼容 /v1/audio/transcriptions，v1.6.0 听视频翻译用 */
     var asrApiKey: String
-        get() = sp.getString(KEY_ASR_API_KEY, "") ?: ""
-        set(value) = sp.edit().putString(KEY_ASR_API_KEY, value).apply()
+        get() = getSecret(KEY_ASR_API_KEY)
+        set(value) = putSecret(KEY_ASR_API_KEY, value)
 
     var asrBaseUrl: String
         get() = sp.getString(KEY_ASR_BASE_URL, "https://api.openai.com/v1") ?: "https://api.openai.com/v1"
@@ -223,10 +337,55 @@ class Prefs(context: Context) {
         get() = sp.getString(KEY_ASR_MODEL, "whisper-1") ?: "whisper-1"
         set(value) = sp.edit().putString(KEY_ASR_MODEL, value).apply()
 
-    /** 语音输入引擎：system（系统 SpeechRecognizer）/ whisper（自建采集+Whisper，v1.7.0） */
+    /**
+     * 语音输入引擎：system（系统 SpeechRecognizer）/ whisper（自建采集+Whisper，v1.7.0）
+     *
+     * v1.27.0：空串表示"用户还没选过"，由界面按**本机实际能力**推断
+     * （系统听写可用 → system，不可用 → whisper），而不是无脑默认 system。
+     *
+     * 为什么改：本 App 要对付的典型设备正是"ROM 把识别服务对第三方 App 藏了"
+     * 那一类，而这类设备上 system 是**一定失败**的。默认给 system 等于
+     * 一进语音页就撞墙，用户看到的是"按下没反应"。
+     * 让默认值跟着能力走，第一屏就是可用的。
+     */
     var voiceEngine: String
-        get() = sp.getString(KEY_VOICE_ENGINE, "system") ?: "system"
+        get() = sp.getString(KEY_VOICE_ENGINE, "") ?: ""
         set(value) = sp.edit().putString(KEY_VOICE_ENGINE, value).apply()
+
+    /** 用户是否显式选过语音引擎（没选过时界面自行推断，见 [voiceEngine]） */
+    val voiceEngineChosen: Boolean
+        get() = voiceEngine.isNotBlank()
+
+    /**
+     * 语音识别的语言（v1.24.0）。
+     *
+     * 存的是 BCP-47 标签（如 `cmn-Hans-CN` / `ja-JP`），空串表示"还没选过"，
+     * 此时界面按系统语言推断默认值。
+     *
+     * ## 为什么必须记住它
+     *
+     * 语音识别引擎**必须知道用什么语言模型去解码**，否则就按系统语言硬解 ——
+     * 中文系统下说日语会被转成罗马音（`konichiwa` 而不是 `こんにちは`）。
+     * 而每句都让用户重选一遍语种是不可接受的，所以把上次的选择持久化：
+     * 切到日语后就一直是日语，直到用户主动改回。
+     */
+    var voiceListenLang: String
+        get() = sp.getString(KEY_VOICE_LISTEN_LANG, "") ?: ""
+        set(value) = sp.edit().putString(KEY_VOICE_LISTEN_LANG, value).apply()
+
+    /**
+     * 图片翻译的呈现方式（v1.25.0）：`overlay` 译文原位覆盖 / `region` 框选翻译。
+     *
+     * 默认 `overlay` —— 用户对"图片翻译"的期待是"看到的就是译文"，
+     * 而不是"下面出现一段不知道对应图上哪里的文字"。
+     * 保留 `region` 是因为"只想要某一段的译文"这个诉求真实存在
+     * （例如一张长图里只想翻中间那一块），删掉它等于砍掉一条有用的路径。
+     *
+     * 存字符串而不是布尔：将来若要加第三种（例如"双语对照"）不用改数据格式。
+     */
+    var imageTranslateMode: String
+        get() = ImageTranslateMode.normalize(sp.getString(KEY_IMAGE_MODE, ImageTranslateMode.OVERLAY))
+        set(value) = sp.edit().putString(KEY_IMAGE_MODE, ImageTranslateMode.normalize(value)).apply()
 
     /** 用户曾开启过无障碍服务（开机时若发现被 ROM 关掉，发通知提醒重开，v1.7.0） */
     var accessibilityEverOn: Boolean
@@ -431,6 +590,9 @@ class Prefs(context: Context) {
         private const val KEY_BAIDU_KEY = "baidu_key"
         private const val KEY_CAIYUN_TOKEN = "caiyun_token"
         private const val KEY_TARGET_LANG = "target_lang"
+
+        /** v1.20.0：源语言。默认 auto，与升级前行为一致 */
+        private const val KEY_SOURCE_LANG = "source_lang"
         private const val KEY_AUTO_TRANSLATE = "auto_translate"
         private const val KEY_OVERLAY_ENABLED = "overlay_enabled"
         private const val KEY_SELECTION_TRANSLATE = "selection_translate"
@@ -447,6 +609,9 @@ class Prefs(context: Context) {
         private const val KEY_ASR_BASE_URL = "asr_base_url"
         private const val KEY_ASR_MODEL = "asr_model"
         private const val KEY_VOICE_ENGINE = "voice_engine"
+        private const val KEY_VOICE_LISTEN_LANG = "voice_listen_lang"
+        /** v1.25.0 图片翻译呈现方式（overlay / region） */
+        private const val KEY_IMAGE_MODE = "image_translate_mode"
         private const val KEY_ACCESSIBILITY_EVER_ON = "accessibility_ever_on"
         private const val KEY_ONBOARDING_DONE = "onboarding_done"
         private const val KEY_TTS_AUTO_SPEAK = "tts_auto_speak"
@@ -504,6 +669,38 @@ class Prefs(context: Context) {
         private const val KEY_LIVE_TEXT_SCALE = "live_text_scale"
         private const val KEY_LIVE_PANEL_W = "live_panel_w"
         private const val KEY_LIVE_PANEL_H = "live_panel_h"
+
+        private const val TAG = "Prefs"
+
+        /** 密钥专用 SharedPreferences 文件名。备份规则按这个**文件名**排除，改名前先看 xml/。 */
+        private const val SECRET_FILE = "screen_translator_secrets"
+
+        /**
+         * 需要加密存储的键（v1.18.0）。
+         *
+         * 判断标准是"泄漏后会造成实际损失"：各家 API Key / Secret / Token 全部在内。
+         * baseUrl / model / 各种开关**不在内** —— 它们不是秘密，加密只会拖慢读写、
+         * 增加故障面。
+         *
+         * 这个集合放在 companion object 的**末尾**：Kotlin 的对象属性按书写顺序初始化，
+         * 虽然 KEY_* 都是 `const val`（编译期内联、不产生字段访问，顺序其实无所谓），
+         * 但把它写在所有常量之后能避免将来有人把某个 KEY_ 改成普通 val 时踩坑。
+         */
+        private val SENSITIVE_KEYS = setOf(
+            KEY_API_KEY,
+            KEY_GOOGLE_API_KEY,
+            KEY_MS_API_KEY,
+            KEY_DEEPL_API_KEY,
+            KEY_OPENAI_API_KEY,
+            KEY_CLAUDE_API_KEY,
+            KEY_QWEN_API_KEY,
+            KEY_GLM_API_KEY,
+            KEY_DOUBAO_API_KEY,
+            KEY_BAIDU_APP_ID,
+            KEY_BAIDU_KEY,
+            KEY_CAIYUN_TOKEN,
+            KEY_ASR_API_KEY
+        )
     }
 }
 
@@ -519,6 +716,20 @@ object LiveOverlayMode {
     const val COVER = "cover"
 
     fun normalize(v: String?): String = if (v == COVER) COVER else EDGE
+}
+
+/**
+ * 图片翻译的呈现方式（v1.25.0）。
+ *
+ * 存字符串而不是布尔：将来若要加第三种（例如"双语对照"）不用改数据格式。
+ */
+object ImageTranslateMode {
+    /** 译文盖在原文上（默认）—— 与拍照翻译一致的"看到的就是译文" */
+    const val OVERLAY = "overlay"
+    /** 拖框选区域，只翻框内，结果在下方文本框（v1.8.0 原始交互） */
+    const val REGION = "region"
+
+    fun normalize(v: String?): String = if (v == REGION) REGION else OVERLAY
 }
 
 /**

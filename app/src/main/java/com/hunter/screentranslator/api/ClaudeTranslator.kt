@@ -32,7 +32,8 @@ class ClaudeTranslator(
         imageBytes: ByteArray,
         mimeType: String,
         targetLang: String,
-        hint: String?
+        hint: String?,
+        sourceLang: String
     ): Result<String> = withContext(Dispatchers.IO) {
         runCatching {
             require(imageBytes.isNotEmpty()) { "图片数据为空" }
@@ -43,6 +44,8 @@ class ClaudeTranslator(
 
             val model = prefs.claudeModel.trim().ifBlank { "claude-3-5-haiku-20241022" }
             val targetName = LANG_DISPLAY[targetLang] ?: targetLang
+            // v1.20.0：图片通道的源语言说明，拼在基础提示词之外（同 hint 的处理方式）
+            val srcNote = srcNoteOf(sourceLang)
             val b64 = android.util.Base64.encodeToString(imageBytes, android.util.Base64.NO_WRAP)
 
             val body = JSONObject().apply {
@@ -53,7 +56,8 @@ class ClaudeTranslator(
                     "你是屏幕翻译引擎。读出用户给的截图里所有可见文字并翻译成【$targetName】。" +
                         "只输出译文，按阅读顺序分行；不要描述画面、不要解释。" +
                         "画面里没有文字时只输出：没有识别到文字" +
-                        if (hint.isNullOrBlank()) "" else "\n【本次输入的特殊说明】\n$hint"
+                        if (hint.isNullOrBlank()) "" else "\n【本次输入的特殊说明】\n$hint" +
+                        srcNote
                 )
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
@@ -104,7 +108,11 @@ class ClaudeTranslator(
         }
     }
 
-    override suspend fun translate(text: String, targetLang: String): Result<String> =
+    override suspend fun translate(
+        text: String,
+        targetLang: String,
+        sourceLang: String
+    ): Result<String> =
         withContext(Dispatchers.IO) {
             runCatching {
                 if (text.isBlank()) return@runCatching ""
@@ -116,10 +124,17 @@ class ClaudeTranslator(
                 val model = prefs.claudeModel.trim().ifBlank { "claude-3-5-haiku-20241022" }
                 val targetName = LANG_DISPLAY[targetLang] ?: targetLang
 
+                // v1.20.0：源语言从写死的「自动识别源语言」改成按选项生成
+                val srcHint = if (sourceLang == SOURCE_AUTO) {
+                    "自动识别源语言"
+                } else {
+                    "原文语言是 ${LANG_DISPLAY[sourceLang] ?: sourceLang}，请直接按该语言理解"
+                }
+
                 val body = JSONObject().apply {
                     put("model", model)
                     put("max_tokens", 4096)
-                    put("system", "你是实时屏幕翻译引擎。把用户给你的文字翻译成【$targetName】（自动识别源语言）。只输出译文本身，保留换行结构，不要任何解释。")
+                    put("system", "你是实时屏幕翻译引擎。把用户给你的文字翻译成【$targetName】（$srcHint）。只输出译文本身，保留换行结构，不要任何解释。")
                     put("messages", JSONArray().apply {
                         put(JSONObject().apply {
                             put("role", "user")
@@ -156,5 +171,18 @@ class ClaudeTranslator(
                     sb.toString().trim()
                 }
             }
+        }
+
+    /**
+     * 图片通道的源语言追加说明；[SOURCE_AUTO] 时返回空串（保持"自动识别"行为）。
+     *
+     * 返回的字符串以 `\n` 开头，直接拼在 system 提示词末尾即可。
+     */
+    private fun srcNoteOf(sourceLang: String): String =
+        if (sourceLang == SOURCE_AUTO) {
+            ""
+        } else {
+            val name = LANG_DISPLAY[sourceLang] ?: sourceLang
+            "\n【画面文字的语言】\n画面里的文字是 $name，请直接按 $name 理解，不要自行判断语种。"
         }
 }

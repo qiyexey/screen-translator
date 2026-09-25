@@ -21,6 +21,8 @@ import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
+import com.hunter.screentranslator.util.EdgeToEdge
 import com.hunter.screentranslator.util.HistoryStore
 import com.hunter.screentranslator.util.Speaker
 
@@ -42,6 +44,7 @@ class HistoryActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         title = "翻译历史"
         setContentView(buildUi())
+        EdgeToEdge.install(this)
         refresh()
     }
 
@@ -181,7 +184,7 @@ class HistoryActivity : AppCompatActivity() {
             actions.addView(smallBtn("复制") {
                 val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 cm.setPrimaryClip(ClipData.newPlainText("译文", item.translated))
-                toast("已复制译文")
+                toast(getString(R.string.history_t01))
             })
             actions.addView(smallBtn("🔊 译文") {
                 // v1.9.3：历史条目各自记录了自己的目标语言（item.targetLang），
@@ -225,7 +228,7 @@ class HistoryActivity : AppCompatActivity() {
     private fun exportHistory() {
         val f = HistoryStore.exportTxt()
         if (f == null) {
-            toast("没有可导出的记录")
+            toast(getString(R.string.history_t03))
             return
         }
         runCatching {
@@ -254,7 +257,7 @@ class HistoryActivity : AppCompatActivity() {
             .setPositiveButton("清空") { _, _ ->
                 HistoryStore.clearUnfavorited()
                 refresh()
-                toast("已清空（收藏保留）")
+                toast(getString(R.string.history_t02))
             }
             .setNegativeButton("取消", null)
             .show()

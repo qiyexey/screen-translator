@@ -26,7 +26,31 @@ MIT），因为本 .so 导出的是同一组 JNI 符号（`Java_org_codeshipping
    否则整份 wrapper 实现被 `#if LLAMA_AVAILABLE` 编成空，链接出一个只有 90KB、
    缺实现的 .so）。
 
-## 复现步骤（设备内，Termux 环境）
+## 复现步骤（v1.18.0：NDK 交叉编译，在电脑上跑）
+
+```bash
+ANDROID_NDK_HOME=/path/to/ndk bash jni/build-android.sh
+```
+
+脚本会做完下面所有事，任何一项验收不过就**直接失败**（不会留下一个半成品 .so）：
+
+1. 从 `ANDROID_NDK_HOME` / `ANDROID_HOME` / `ANDROID_SDK_ROOT` 自动定位 NDK；
+2. clone llama.cpp 到 `$HOME/.cache/llama.cpp-android` 并 checkout 固定 commit `4bc272f`；
+3. 用 `-DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-26 -DGGML_CPU_ARM_ARCH=armv8.6-a`
+   编静态库，开 `dotprod / i8mm / fp16` 三个内核开关；
+4. 编 JNI 桥并链成单个 `libllama-android.so`（含 `-Wl,-z,max-page-size=16384`，满足
+   Android 15 的 16KB 页要求）；
+5. 跑 5 项验收（13 个 JNI 符号 / 0 个未解析 `LlamaContextWrapper` / `hunyuan-dense` 存在 /
+   `sdot` > 0 / `smmla` > 0）并打印 LOAD 段对齐。
+
+**为什么要改**：v1.17.0 的 `.so` 是在**手机上的 Termux 里**编出来的 —— 产物里残留着
+调试路径 `/data/data/com.dsharnessmobile.shell/files/home/work/llama.cpp/ggml/src/...`。
+那条路只能在那一台设备、那一个 Termux 环境里复现，进不了 CI，也没法给别人用。
+
+### 旧流程（v1.17.0 用的设备内编译，保留备查）
+
+<details>
+<summary>展开 Termux 版命令</summary>
 
 ```bash
 B=$PREFIX                      # /data/data/<pkg>/files/usr
@@ -57,7 +81,11 @@ clang++ -shared -fPIC -O3 -std=c++17 -fvisibility=hidden -fvisibility-inlines-hi
 > 在包名不同的环境里 spawn 一律 Error 127：cmake 要用 `-DCMAKE_MAKE_PROGRAM=<包装脚本>`，
 > 包装脚本里 `exec make SHELL=$PREFIX/bin/sh "$@"`。
 
+</details>
+
 ## 验收（编完必查）
+
+`jni/build-android.sh` 已内置这几条，手工核验时用：
 
 ```bash
 nm -D --defined-only libllama-android.so | grep -c Java_org_codeshipping   # 13

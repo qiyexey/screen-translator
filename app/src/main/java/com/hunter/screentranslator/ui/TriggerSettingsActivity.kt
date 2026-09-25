@@ -2,8 +2,10 @@ package com.hunter.screentranslator.ui
 
 import android.os.Bundle
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.R
 import com.hunter.screentranslator.databinding.ActivityTriggerSettingsBinding
 import com.hunter.screentranslator.service.OverlayService
+import com.hunter.screentranslator.util.EdgeToEdge
 
 /**
  * v1.12.0 三级页：翻译触发方式。
@@ -19,7 +21,8 @@ class TriggerSettingsActivity : BaseActivity() {
         super.onCreate(savedInstanceState)
         b = ActivityTriggerSettingsBinding.inflate(layoutInflater)
         setContentView(b.root)
-        b.btnBack.setOnClickListener { finish() }
+        EdgeToEdge.install(this)
+        b.topAppBar.setNavigationOnClickListener { finish() }
 
         b.swAutoTranslate.isChecked = App.prefs.autoTranslate
         b.swOverlay.isChecked = App.prefs.overlayEnabled
@@ -36,7 +39,7 @@ class TriggerSettingsActivity : BaseActivity() {
             App.prefs.floatingBall = b.swFloatingBall.isChecked
             App.prefs.clipboardTranslate = b.swClipboardTranslate.isChecked
 
-            toast("已保存")
+            toast(getString(R.string.common_t10))
             // 保存后如果权限齐全，直接把悬浮窗拉起来
             maybeStartOverlay()
             // 悬浮球开关变化 → 即时增删悬浮球
