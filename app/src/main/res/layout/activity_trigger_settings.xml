@@ -61,7 +61,7 @@
                     android:layout_marginTop="2dp"
                     android:text="@string/trigger_settings_t03"
                     android:textColor="?attr/colorOnSurfaceVariant"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -89,7 +89,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/trigger_settings_t07"
                             android:textColor="?attr/colorOnSurfaceVariant"
-                            android:textSize="10sp" />
+                            android:textSize="12sp" />
                     </LinearLayout>
 
                     <com.google.android.material.switchmaterial.SwitchMaterial
@@ -150,7 +150,7 @@
                             android:layout_height="wrap_content"
                             android:text="@string/trigger_settings_t06"
                             android:textColor="?attr/colorOnSurfaceVariant"
-                            android:textSize="10sp" />
+                            android:textSize="12sp" />
                     </LinearLayout>
 
                     <com.google.android.material.switchmaterial.SwitchMaterial

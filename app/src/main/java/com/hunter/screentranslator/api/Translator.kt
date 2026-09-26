@@ -133,7 +133,7 @@ enum class TranslationEngine(
      * 这个属性存在的意义是给"引导页"和"语音翻译开录前的预检"一个**统一判据** ——
      * 判据散在各处时，新增一个免密钥引擎（例如将来又加一个公开接口）
      * 必然有人忘了同步，表现就是"选了它还被提示去填密钥"。
-     * 注意本地模型免密钥、但要判"模型文件是否已下载"，那是 [readyCheck] 的事，
+     * 注意本地模型免密钥、但要判"模型文件是否已下载"，那是 [engineReadiness] 的事，
      * 不能靠这个布尔值单独下结论。
      */
     val keyless: Boolean
@@ -153,10 +153,10 @@ enum class TranslationEngine(
  *
  * 调用方只需传一个 `(key) -> String` 的取值器（一般是 `App.prefs::secretOf`）。
  *
- * 返回三态，而不是一个 Boolean：
- *  - [Ready]：配好了，可以翻译；
- *  - [MissingKey]：需要用户去填密钥 / 下载模型，附一句**可直接展示给用户**的说明；
- *  - 免密钥引擎（必应网页版）永远返回 [Ready]。
+ * 返回可用状态，而不是一个 Boolean：
+ *  - [EngineReadiness.Ready]：配好了，可以翻译；
+ *  - [EngineReadiness.NotReady]：需要配置 / 下载模型，附一句可展示给用户的说明。
+ * 免密钥引擎（必应网页版）永远返回 Ready。
  *
  * 为什么不是 Boolean：调用方要的从来不只是"行不行"，而是"不行的话告诉他去做什么"。
  * 只返回 Boolean 会逼着每个调用点各写一遍"那到底缺什么"的判断，
@@ -168,8 +168,7 @@ sealed interface EngineReadiness {
 
     /**
      * 还不能翻译。[reason] 是给用户看的一句话（指明缺什么、去哪配）。
-     * [keyless] 为 true 表示这个引擎本来就不需要密钥（当前只有本地模型走这条，
-     * 它缺的是模型文件而不是密钥）。
+     * 本地引擎缺的是模型文件而不是密钥。
      */
     data class NotReady(val reason: String) : EngineReadiness
 }
@@ -178,17 +177,20 @@ sealed interface EngineReadiness {
  * 判断某引擎当前是否可用。
  *
  * @param engine 当前选中的引擎
+ * @param localModelReady 本地模型文件是否完整，默认不就绪，避免漏检时误报可用。
  * @param valueOf 按偏好键取名，例如 `{ key -> App.prefs.raw(key) }`；
  *                实现里对未知键返回空串即可。
  */
 fun engineReadiness(
     engine: TranslationEngine,
+    localModelReady: Boolean = false,
     valueOf: (String) -> String
 ): EngineReadiness = when (engine) {
     // 公共网页接口，不需要任何凭据
     TranslationEngine.BING_WEB -> EngineReadiness.Ready
-    // 本地模型免密钥，但"模型文件在不在"由调用方另行判断（见 OnboardingActivity）
-    TranslationEngine.HYMT_LOCAL -> EngineReadiness.Ready
+    TranslationEngine.HYMT_LOCAL ->
+        if (localModelReady) EngineReadiness.Ready
+        else EngineReadiness.NotReady("请先在翻译引擎设置中下载完整的本地模型")
     TranslationEngine.DEEPSEEK ->
         if (valueOf("api_key").isNotBlank()) EngineReadiness.Ready
         else EngineReadiness.NotReady("还没有填 DeepSeek 的 API Key")
@@ -205,7 +207,7 @@ fun engineReadiness(
         if (valueOf("glm_api_key").isNotBlank()) EngineReadiness.Ready
         else EngineReadiness.NotReady("还没有填智谱 GLM 的 API Key")
     TranslationEngine.DOUBAO ->
-        if (valueOf("doubao_api_key").isNotBlank()) EngineReadiness.Ready
+        if (valueOf("doubao_api_key").isNotBlank() && valueOf("doubao_model").isNotBlank()) EngineReadiness.Ready
         else EngineReadiness.NotReady("还没有填火山豆包的 API Key 与模型名")
     TranslationEngine.GOOGLE ->
         if (valueOf("google_api_key").isNotBlank()) EngineReadiness.Ready
@@ -217,7 +219,7 @@ fun engineReadiness(
         if (valueOf("deepl_api_key").isNotBlank()) EngineReadiness.Ready
         else EngineReadiness.NotReady("还没有填 DeepL 的 Auth Key")
     TranslationEngine.BAIDU ->
-        if (valueOf("baidu_app_id").isNotBlank()) EngineReadiness.Ready
+        if (valueOf("baidu_app_id").isNotBlank() && valueOf("baidu_key").isNotBlank()) EngineReadiness.Ready
         else EngineReadiness.NotReady("还没有填百度翻译的 AppID 与密钥")
     TranslationEngine.CAIYUN ->
         if (valueOf("caiyun_token").isNotBlank()) EngineReadiness.Ready

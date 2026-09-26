@@ -14,10 +14,9 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
-    <!-- v1.6.0：语音功能 -->
+    <!-- 语音输入和实时屏幕翻译 -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
 
     <!-- v1.11.0：拍照翻译 -->
     <uses-permission android:name="android.permission.CAMERA" />
@@ -129,16 +128,6 @@
                 android:value="实时屏幕翻译悬浮窗" />
         </service>
 
-        <!-- v1.6.0：听视频翻译服务（内录走 mediaProjection，麦克风走 microphone） -->
-        <service
-            android:name=".service.VideoListenService"
-            android:exported="false"
-            android:foregroundServiceType="mediaProjection|microphone">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="听视频实时翻译字幕" />
-        </service>
-
         <!-- v1.15.0：实时屏幕翻译（常驻 MediaProjection + 视觉模型 + 原位叠层） -->
         <service
             android:name=".service.LiveTranslateService"
@@ -157,12 +146,8 @@
         <!-- v1.6.0：语音输入翻译 -->
         <activity
             android:name=".ui.VoiceTranslateActivity"
-            android:exported="false" />
-
-        <!-- v1.6.0：听视频翻译控制页 -->
-        <activity
-            android:name=".ui.VideoListenActivity"
-            android:exported="false" />
+            android:exported="false"
+            android:windowSoftInputMode="adjustResize" />
 
         <!-- v1.8.0：图片翻译（按需申请 MediaProjection 授权，抓一帧后立即释放） -->
         <activity

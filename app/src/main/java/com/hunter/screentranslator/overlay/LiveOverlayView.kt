@@ -296,10 +296,10 @@ class LiveOverlayView(private val ctx: Context) : LinearLayout(ctx) {
         }
     }
 
-    /** 当前链路的常规状态文案（读图模式 / 免费本机识别模式） */
+    /** 当前链路的常规状态文案 */
     private fun statusLabel(): String =
         if (TranslationEngine.fromKey(App.prefs.engine).visionCapable) "实时翻译 · 读图模式"
-        else "实时翻译 · 免费模式 · 本机识别"
+        else "实时翻译 · 本机识别 + 文本翻译"
 
     fun showMessage(status: String, text: String = "") {
         contentShown = true

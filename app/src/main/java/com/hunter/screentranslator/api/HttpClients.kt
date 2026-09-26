@@ -10,8 +10,8 @@ import java.util.concurrent.TimeUnit
  * 修复前每个翻译引擎各自 `private val client = OkHttpClient.Builder()...build()`，
  * 而 [TranslatorFactory.current] 每次翻译都新建一个引擎实例 —— 于是每次翻译都会
  * 新建一个 OkHttpClient，同时泄漏一个 ConnectionPool（默认 5 空闲连接 / 5 分钟）
- * 和一个 Dispatcher 线程池（默认 64 线程）。WhisperClient 更严重：它在构造函数里
- * 建 client，而 VideoListenService 每个音频分段都新建一个。
+ * 和一个 Dispatcher 线程池（默认 64 线程）。语音翻译按分段创建 WhisperClient，
+ * 因此它也必须复用同一个底层 client。
  *
  * OkHttp 官方明确要求共享实例：每个 client 应共用连接池与线程池。
  * 这里按"用途"分三个池（超时不同），而不是按引擎分 —— 引擎之间可以安全共用。

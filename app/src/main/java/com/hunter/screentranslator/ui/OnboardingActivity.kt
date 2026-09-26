@@ -19,11 +19,7 @@ import com.hunter.screentranslator.App
 import com.hunter.screentranslator.R
 import com.hunter.screentranslator.api.EngineReadiness
 import com.hunter.screentranslator.api.TranslationEngine
-import com.hunter.screentranslator.api.engineReadiness
 import com.hunter.screentranslator.util.EdgeToEdge
-import com.hunter.screentranslator.util.HyMtModelStatus
-import com.hunter.screentranslator.util.HyMtModelStore
-import com.hunter.screentranslator.util.HyMtQuant
 
 /**
  * v1.13.0 首次引导。
@@ -216,7 +212,7 @@ class OnboardingActivity : BaseActivity() {
                     filled -> "✅ 已配置「${engine.displayName}」"
                     engine == TranslationEngine.HYMT_LOCAL ->
                         "❌ 本地模型还没下载（设置 → 翻译引擎 → 腾讯 Hy-MT2）"
-                    else -> "❌ 还不能翻译：${(engineReadiness(engine) { App.prefs.raw(it) } as? EngineReadiness.NotReady)?.reason ?: "还没配置"}"
+                    else -> "❌ 还不能翻译：${(App.prefs.readiness(engine) as? EngineReadiness.NotReady)?.reason ?: "还没配置"}"
                 }
                 tvStatus.setTextColor(if (filled) ok else bad)
             }
@@ -225,16 +221,7 @@ class OnboardingActivity : BaseActivity() {
     }
 
     private fun anyEngineKeyFilled(): Boolean {
-        val engine = TranslationEngine.fromKey(App.prefs.engine)
-        // 本地大模型的判据不是"有没有密钥"（它免密钥），而是"模型文件下没下"。
-        // 没有这一条，用户在引导页会看到"已配置"，点翻译才发现模型根本没下载。
-        if (engine == TranslationEngine.HYMT_LOCAL) {
-            return HyMtModelStore.status(HyMtQuant.fromId(App.prefs.hymtQuant)) is HyMtModelStatus.Ready
-        }
-        // v1.26.0：其余引擎统一走 api 包里的共享判据 —— 原来这里有一份 12 分支的 when，
-        // 语音页还要再写一份。两份迟早漂移（比如新增一个免密钥引擎时只改了一处），
-        // 而漂移的表现是"引导页说配好了、语音页说没配"这种让人无所适从的矛盾。
-        return engineReadiness(engine) { key -> App.prefs.raw(key) } is EngineReadiness.Ready
+        return App.prefs.readiness() is EngineReadiness.Ready
     }
 
     /** Android 13+ 侧载 APK 的无障碍开关是"受限设置"，先讲清怎么解锁再去 */

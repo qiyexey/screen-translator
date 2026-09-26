@@ -194,7 +194,6 @@ missing_calls = []
 call_files = [
     "java/com/hunter/screentranslator/service/LiveTranslateService.kt",
     "java/com/hunter/screentranslator/service/ScreenReaderService.kt",
-    "java/com/hunter/screentranslator/service/VideoListenService.kt",
     "java/com/hunter/screentranslator/ui/CameraTranslateActivity.kt",
     "java/com/hunter/screentranslator/ui/EngineSettingsActivity.kt",
     "java/com/hunter/screentranslator/ui/ImageTranslateActivity.kt",
@@ -234,10 +233,9 @@ check(
     not missing_calls,
     "漏传：" + "; ".join(missing_calls),
 )
-print("       共发现 %d 个生产调用点（应为 14）" % call_count)
-# 14 而非 13：EngineSettingsActivity 里有两个 —— 测试翻译按钮一处，
-# Hy-MT 的引擎自检另有一处（早期统计漏了后者）。
-check("调用点数量符合预期（14）", call_count == 14, "实际 %d 个" % call_count)
+print("       共发现 %d 个生产调用点（应为 13）" % call_count)
+# EngineSettingsActivity 有两个调用点：测试翻译和 Hy-MT 引擎自检。
+check("调用点数量符合预期（13）", call_count == 13, "实际 %d 个" % call_count)
 
 # -------------------------------------------------------- 6. Prefs 与 UI
 prefs = read("java/com/hunter/screentranslator/util/Prefs.kt")
@@ -273,9 +271,18 @@ check("语音页记忆上次选择（App.prefs.voiceListenLang）",
 # v1.24.0 核心断言：必须把语言下发给引擎，不能像 v1.23.0 那样完全不下发。
 # 完全不下发 → 引擎按系统语言硬解 → 日语输出罗马音（真机实测 konichiwa）。
 check("两处识别请求都下发 EXTRA_LANGUAGE（否则外语出罗马音）",
-      voice_code.count("putExtra(RecognizerIntent.EXTRA_LANGUAGE, listenLangs[langIndex])") >= 2)
-check("语言列表里中文用 cmn-Hans-CN 而非 zh-CN（SODA 不认 zh-CN）",
-      "cmn-Hans-CN" in voice_code and '"zh-CN"' not in voice_code)
+      voice_code.count("RecognizerIntent.EXTRA_LANGUAGE,") >= 2)
+check("设备端与系统默认识别器使用各自的中文语言标签",
+      "cmn-Hans-CN" in voice_code
+      and "java.util.Locale.SIMPLIFIED_CHINESE.toLanguageTag()" in voice_code
+      and "if (usingOnDeviceRecognizer) listenLangs[langIndex] else systemLanguageTag()" in voice_code)
+recognizer_setup = voice_code.split("private fun ensureRecognizer(): Boolean", 1)[1].split("private fun startSystem()", 1)[0]
+check("系统默认识别器优先，设备端只作兜底",
+      recognizer_setup.index("SpeechRecognizer.createSpeechRecognizer(this)")
+      < recognizer_setup.index("SpeechRecognizer.createOnDeviceSpeechRecognizer(this)"))
+ready_callback = voice_code.split("override fun onReadyForSpeech", 1)[1].split("override fun onBeginningOfSpeech", 1)[0]
+check("仅收到识别结果才清除网络错误计数，避免无限重连",
+      "consecutiveErrors = 0" not in ready_callback)
 check("不再使用 Android14 语言检测 API（实测需本地语言包，本机不可用）",
       "EXTRA_ENABLE_LANGUAGE_DETECTION" not in voice_code)
 check("语音页已无 updateLangButton 残留（只看代码，注释里提到不算）",
@@ -293,9 +300,6 @@ check("WhisperClient 不再硬性 require API Key（只看代码）",
 check("WhisperClient 空 Key 时整个不发送 Authorization（而非空 Bearer）",
       re.search(r'if \(apiKey\.isNotBlank\(\)\) header\("Authorization"', whisper))
 
-vla = read("java/com/hunter/screentranslator/ui/VideoListenActivity.kt")
-check("听视频页 Key 缺失改为确认而非拦截",
-      "proceedStart()" in vla and 'setPositiveButton("继续")' in vla)
 check("语音页 Key 缺失改为确认而非拦截",
       "reallyStartWhisper()" in voice and 'setPositiveButton("继续")' in voice)
 
@@ -371,16 +375,19 @@ check("Prefs.raw(key) 已提供（判据的唯一取值入口）",
       "fun raw(key: String): String" in prefs2 and "getSecret(key)" in prefs2)
 check("raw() 对敏感键走加密读取（否则与设置页读数不一致）",
       "if (key in SENSITIVE_KEYS) getSecret(key)" in prefs2)
+check("Prefs.readiness() 统一检查凭据与本地模型完整性",
+      "fun readiness(" in prefs2 and "engineReadiness(" in prefs2
+      and "HyMtModelStore.status(" in prefs2 and "valueOf = ::raw" in prefs2)
 
 onb = read("java/com/hunter/screentranslator/ui/OnboardingActivity.kt")
 check("引导页改用共享判据（删掉自己的 12 分支 when）",
-      "engineReadiness(engine)" in onb and "TranslationEngine.CAIYUN -> App.prefs.caiyunToken" not in onb)
+      "App.prefs.readiness(" in onb and "TranslationEngine.CAIYUN -> App.prefs.caiyunToken" not in onb)
 check("引导页说明里点出「本 App 不含内置密钥」与免密钥出路",
       "不含任何内置密钥" in onb and "必应网页版" in onb)
 
 voice_code2 = read_code("java/com/hunter/screentranslator/ui/VoiceTranslateActivity.kt")
 check("语音页在**开录前**预检引擎（否则用户说完整句才看到失败）",
-      "engineReadiness(engine)" in voice_code2 and "warnEngineNotReady(engine)" in voice_code2)
+      "App.prefs.readiness(engine)" in voice_code2 and "warnEngineNotReady(engine)" in voice_code2)
 check("语音页「处理」按钮随故障类型切换动作（引擎 / 听写）",
       "SpeechFix.ENGINE" in voice_code2 and "SpeechFix.SPEECH" in voice_code2
       and "EngineSettingsActivity::class.java" in voice_code2)

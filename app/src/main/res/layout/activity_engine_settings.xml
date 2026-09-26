@@ -32,12 +32,12 @@
             android:orientation="vertical"
             android:paddingHorizontal="20dp"
             android:paddingTop="16dp"
-            android:paddingBottom="20dp">
+            android:paddingBottom="28dp">
 
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            app:cardCornerRadius="@dimen/md_card_radius"
+            app:cardCornerRadius="@dimen/md_corner_lg"
             app:cardElevation="0dp"
             app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
 
@@ -45,13 +45,13 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:orientation="vertical"
-                android:padding="16dp">
+                android:padding="20dp">
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:text="@string/engine_settings_t35"
                     android:textColor="?attr/colorOnSurface"
-                    android:textSize="16sp"
+                    android:textSize="18sp"
                     android:textStyle="bold" />
 
                 <TextView
@@ -66,7 +66,7 @@
                     style="@style/Widget.ScreenTranslator.DropdownLayout"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="2dp">
+                    android:layout_marginTop="12dp">
 
                     <com.google.android.material.textfield.MaterialAutoCompleteTextView
                         android:id="@+id/spinnerEngine"
@@ -109,8 +109,10 @@
                         android:layout_marginTop="8dp"
                         android:text="@string/engine_settings_tv_api_key_help"
                         android:textColor="?attr/colorPrimary"
-                        android:textSize="11sp"
-                        android:padding="2dp" />
+                        android:textSize="12sp"
+                        android:minHeight="40dp"
+                        android:gravity="center_vertical"
+                        android:paddingHorizontal="2dp" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         style="@style/Widget.Material3.TextInputLayout.OutlinedBox"
@@ -187,7 +189,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t08"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== 微软配置区 ===== -->
@@ -234,7 +236,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t02"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== DeepL 配置区 ===== -->
@@ -266,7 +268,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t10"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== OpenAI 配置区 ===== -->
@@ -328,7 +330,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t15"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== Claude 配置区 ===== -->
@@ -375,7 +377,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t09"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== 通义千问配置区 ===== -->
@@ -422,7 +424,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t14"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== 智谱 GLM 配置区 ===== -->
@@ -469,7 +471,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t12"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== 火山豆包配置区 ===== -->
@@ -516,7 +518,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t29"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== 百度翻译配置区 ===== -->
@@ -563,7 +565,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t11"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== 必应网页端（免密钥）说明区 ===== -->
@@ -589,7 +591,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t36"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== v1.17.0 本地大模型（腾讯 Hy-MT2-1.8B，端侧 llama.cpp）===== -->
@@ -615,7 +617,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t24"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -820,7 +822,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t18"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <!-- ===== 彩云小译配置区 ===== -->
@@ -852,7 +854,7 @@
                         android:layout_marginTop="4dp"
                         android:text="@string/engine_settings_t13"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="10sp" />
+                        android:textSize="12sp" />
                 </LinearLayout>
 
                 <TextView
@@ -882,7 +884,7 @@
                     android:layout_marginTop="4dp"
                     android:text="@string/engine_settings_t51"
                     android:textColor="?attr/colorOnSurfaceVariant"
-                    android:textSize="10sp" />
+                    android:textSize="12sp" />
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -906,6 +908,7 @@
                 </com.google.android.material.textfield.TextInputLayout>
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSave"
+            style="@style/Widget.ScreenTranslator.Button.Filled"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="14dp"

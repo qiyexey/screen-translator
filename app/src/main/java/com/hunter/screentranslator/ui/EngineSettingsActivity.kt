@@ -554,32 +554,9 @@ class EngineSettingsActivity : BaseActivity() {
 
         val engine = TranslationEngine.fromKey(App.prefs.engine)
         val engineName = engine.displayName
-        val keyReady = when (engine) {
-            TranslationEngine.DEEPSEEK -> App.prefs.apiKey.isNotBlank()
-            TranslationEngine.OPENAI -> App.prefs.openaiApiKey.isNotBlank()
-            TranslationEngine.CLAUDE -> App.prefs.claudeApiKey.isNotBlank()
-            TranslationEngine.QWEN -> App.prefs.qwenApiKey.isNotBlank()
-            TranslationEngine.GLM -> App.prefs.glmApiKey.isNotBlank()
-            TranslationEngine.DOUBAO ->
-                App.prefs.doubaoApiKey.isNotBlank() && App.prefs.doubaoModel.isNotBlank()
-            TranslationEngine.GOOGLE -> App.prefs.googleApiKey.isNotBlank()
-            TranslationEngine.MICROSOFT -> App.prefs.msApiKey.isNotBlank()
-            TranslationEngine.DEEPL -> App.prefs.deeplApiKey.isNotBlank()
-            TranslationEngine.BAIDU ->
-                App.prefs.baiduAppId.isNotBlank() && App.prefs.baiduKey.isNotBlank()
-            TranslationEngine.CAIYUN -> App.prefs.caiyunToken.isNotBlank()
-            // 免密钥引擎：永远算"已配置"
-            TranslationEngine.BING_WEB -> true
-            // 本地引擎没有密钥，但必须有模型文件 —— 没下完就点测试只会得到
-            // 一句"模型没加载"，不如在这里直接说清下一步做什么。
-            TranslationEngine.HYMT_LOCAL ->
-                HyMtModelStore.status(currentHyMtQuant()) is HyMtModelStatus.Ready
-        }
-        if (!keyReady) {
-            toast(
-                if (engine == TranslationEngine.HYMT_LOCAL) "请先下载模型文件（下方「下载模型」）"
-                else "请先填写 $engineName 的密钥"
-            )
+        val readiness = App.prefs.readiness(engine)
+        if (readiness is com.hunter.screentranslator.api.EngineReadiness.NotReady) {
+            toast(readiness.reason)
             return
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
@@ -594,7 +571,7 @@ class EngineSettingsActivity : BaseActivity() {
             // 用户若把源语言设成"日语"，用它去测英文样例会得到一个明显错误的结果，
             // 从而误判"这个引擎坏了"。测试翻译的目的是验证密钥/网络连通性，
             // 就该用与源语言无关的固定输入。
-            val result = TranslatorFactory.current().translate(
+            val result = TranslatorFactory.current(useCache = false).translate(
                 "Hello! This is a translation test.",
                 App.prefs.targetLang,
                 SOURCE_AUTO
@@ -609,6 +586,8 @@ class EngineSettingsActivity : BaseActivity() {
                     val extra = if (engine == TranslationEngine.HYMT_LOCAL) {
                         HyMtRuntime.lastLatencySummary()?.let { "$it\n（首次翻译包含模型加载时间）" }
                             ?: "本地推理完成。"
+                    } else if (engine == TranslationEngine.BING_WEB) {
+                        "必应网页端可访问，本次没有使用缓存。"
                     } else {
                         "密钥和网络均正常。"
                     }
@@ -619,11 +598,15 @@ class EngineSettingsActivity : BaseActivity() {
                         .show()
                 },
                 onFailure = { e ->
+                    val guidance = if (engine == TranslationEngine.BING_WEB) {
+                        "必应网页版无需密钥。请检查网络连接；若持续失败，网页接口可能已变更。"
+                    } else {
+                        "请检查：\n1. 密钥是否正确\n2. 账户额度/余额\n3. 手机能否访问该服务"
+                    }
                     AlertDialog.Builder(this@EngineSettingsActivity)
                         .setTitle("❌ 测试失败（$engineName）")
                         .setMessage(
-                            "${e.message}\n\n请检查：\n1. 密钥是否正确\n2. 账户额度/余额\n" +
-                                    "3. 手机能否访问该服务"
+                            "${e.message}\n\n$guidance"
                         )
                         .setPositiveButton("好的", null)
                         .show()

@@ -34,7 +34,7 @@
             android:paddingTop="16dp"
             android:paddingBottom="20dp">
 
-        <!-- 语音识别配置卡片（v1.6.0，听视频翻译用） -->
+        <!-- 语音翻译的 Whisper 识别接口配置 -->
         <com.google.android.material.card.MaterialCardView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -108,7 +108,7 @@
                     android:layout_marginTop="4dp"
                     android:text="@string/asr_settings_t02"
                     android:textColor="?attr/colorOnSurfaceVariant"
-                    android:textSize="10sp" />
+                    android:textSize="12sp" />
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
         <com.google.android.material.button.MaterialButton

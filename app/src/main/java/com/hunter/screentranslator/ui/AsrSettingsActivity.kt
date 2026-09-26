@@ -7,7 +7,7 @@ import com.hunter.screentranslator.databinding.ActivityAsrSettingsBinding
 import com.hunter.screentranslator.util.EdgeToEdge
 
 /**
- * v1.12.0 三级页：语音识别（听视频用）。
+ * Whisper 语音识别配置页，供语音翻译使用。
  *
  * 走 OpenAI 兼容的 /v1/audio/transcriptions，与"翻译引擎"是两套独立配置 ——
  * 拆页后终于不用在一堆翻译 Key 里找它。

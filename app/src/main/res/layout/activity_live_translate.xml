@@ -33,17 +33,16 @@
 
             <!-- 运行状态 -->
             <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.ScreenTranslator.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="2dp"
                 app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="14dp">
+                    android:padding="16dp">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -78,25 +77,26 @@
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
                         android:text="@string/live_translate_btn_engine_settings"
-                        android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="12sp" />
+                        android:textColor="?attr/colorPrimary"
+                        android:textSize="13sp"
+                        app:icon="@drawable/ic_settings"
+                        app:iconSize="18dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
             <!-- 翻译区域 -->
             <com.google.android.material.card.MaterialCardView
+                style="@style/Widget.ScreenTranslator.Card"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="10dp"
-                app:cardCornerRadius="12dp"
-                app:cardElevation="2dp"
+                android:layout_marginTop="12dp"
                 app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
 
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
-                    android:padding="14dp">
+                    android:padding="16dp">
 
                     <TextView
                         android:layout_width="wrap_content"
@@ -146,7 +146,7 @@
                         android:layout_marginTop="6dp"
                         android:text="@string/live_translate_t09"
                         android:textColor="?attr/colorOnSurfaceVariant"
-                        android:textSize="11sp"
+                        android:textSize="12sp"
                         android:lineSpacingExtra="2dp" />
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
@@ -167,8 +167,9 @@
                 android:layout_height="150dp"
                 android:layout_marginTop="8dp"
                 android:adjustViewBounds="true"
-                android:background="?attr/colorSurfaceContainerLow"
+                android:background="@drawable/bg_translation_panel"
                 android:contentDescription="@string/live_translate_iv_last_crop_content_description"
+                android:padding="8dp"
                 android:scaleType="fitCenter" />
 
             <TextView
@@ -177,7 +178,7 @@
                 android:layout_marginTop="6dp"
                 android:text="@string/live_translate_t16"
                 android:textColor="?attr/colorOnSurfaceVariant"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:lineSpacingExtra="2dp" />
 
             <!-- 参数 -->
@@ -263,6 +264,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
+                android:minHeight="48dp"
                 android:text="@string/live_translate_switch_touchable"
                 android:textColor="?attr/colorOnSurface"
                 android:textSize="14sp" />
@@ -273,7 +275,7 @@
                 android:layout_marginTop="4dp"
                 android:text="@string/live_translate_t18"
                 android:textColor="?attr/colorOnSurfaceVariant"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:lineSpacingExtra="2dp" />
 
             <!-- v1.15.19：译文面板外观 -->
@@ -426,6 +428,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="10dp"
+                android:minHeight="48dp"
                 android:text="@string/live_translate_switch_cover_mode"
                 android:textColor="?attr/colorOnSurface"
                 android:textSize="14sp" />
@@ -436,7 +439,7 @@
                 android:layout_marginTop="4dp"
                 android:text="@string/live_translate_t19"
                 android:textColor="?attr/colorOnSurfaceVariant"
-                android:textSize="11sp"
+                android:textSize="12sp"
                 android:lineSpacingExtra="2dp" />
 
             <!-- v1.15.4：位置微调（叠层与选区对不上时用） -->
@@ -535,6 +538,16 @@
                 android:visibility="gone" />
 
             <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnRetry"
+                style="@style/Widget.ScreenTranslator.Button.Outlined"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="@string/live_translate_retry"
+                app:icon="@drawable/ic_refresh"
+                android:visibility="gone" />
+
+            <com.google.android.material.button.MaterialButton
                 android:id="@+id/btnStop"
                 style="@style/Widget.ScreenTranslator.Button.Outlined"
                 android:layout_width="match_parent"
@@ -551,7 +564,8 @@
                 android:layout_marginTop="10dp"
                 android:text=""
                 android:textColor="?attr/colorOnSurfaceVariant"
-                android:textSize="11sp" />
+                android:textSize="12sp"
+                android:lineSpacingExtra="2dp" />
 
             <!-- 使用说明（含限制，如实写） -->
             <TextView

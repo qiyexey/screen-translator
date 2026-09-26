@@ -68,7 +68,7 @@
                     android:layout_marginTop="2dp"
                     android:text="@string/tts_settings_t04"
                     android:textColor="?attr/colorOnSurfaceVariant"
-                    android:textSize="11sp" />
+                    android:textSize="12sp" />
 
                 <!-- v1.9.3：朗读内容（原文 / 译文 / 两者） -->
                 <LinearLayout

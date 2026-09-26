@@ -52,7 +52,7 @@ DRY = "--dry-run" in sys.argv
 # A 型：标题取原返回栏里那个 TextView 的 android:text
 FORMA_TITLE = {
     "activity_about.xml": "common_t02",                       # 关于与用法
-    "activity_asr_settings.xml": "common_t08",                # 语音识别（听视频用）
+    "activity_asr_settings.xml": "common_t08",                # Whisper 语音识别
     "activity_ball_style.xml": "common_t04",                  # 悬浮球与面板外观
     "activity_engine_settings.xml": "engine_settings_t35",    # 翻译引擎与密钥
     "activity_permission.xml": "common_t05",                  # 权限与保活
@@ -66,7 +66,6 @@ FORMA_TITLE = {
 # B 型
 FORMB_TITLE = {
     "activity_live_translate.xml": "common_t03",              # 实时屏幕翻译
-    "activity_video_listen.xml": "video_listen_t07",          # 听视频翻译
     "activity_voice_translate.xml": "voice_translate_t02",    # 语音翻译
     "activity_translate_input.xml": "translate_input_t01",    # 输入翻译
 }

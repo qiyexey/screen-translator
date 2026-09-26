@@ -14,7 +14,9 @@ import okhttp3.HttpUrl.Companion.toHttpUrl
  */
 object TranslatorFactory {
 
-    fun current(): Translator {
+    private val bingWeb by lazy { BingWebTranslator() }
+
+    fun current(useCache: Boolean = true): Translator {
         val engine = TranslationEngine.fromKey(App.prefs.engine)
         // 第二项是「缓存作用域」的细粒度部分（端点 + 模型）。换中转、换模型、换区域后
         // 译文可能不同，不能复用老译文；同名模型挂在不同中转后端上甚至可能是两套服务。
@@ -90,9 +92,10 @@ object TranslatorFactory {
             TranslationEngine.BAIDU -> BaiduTranslator() to "fanyi-api.baidu.com"
             TranslationEngine.CAIYUN -> CaiyunTranslator() to "api.interpreter.caiyunai.com"
             // 免密钥：会话由网页端现场引导，作用域固定（换不了端点）
-            TranslationEngine.BING_WEB -> BingWebTranslator() to "bing.com/translator"
+            TranslationEngine.BING_WEB -> bingWeb to "bing.com/translator"
         }
-        return CachingTranslator(built.first, engine.key + "|" + built.second)
+        return if (useCache) CachingTranslator(built.first, engine.key + "|" + built.second)
+        else built.first
     }
 
     /** 取 URL 的 host 作为作用域的一部分；解析失败就退化为原始串 */

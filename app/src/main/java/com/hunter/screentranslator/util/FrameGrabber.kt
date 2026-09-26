@@ -110,6 +110,7 @@ class FrameGrabber(private val ctx: Context) {
      * @param screenRoi 屏幕绝对坐标矩形；null 表示要整帧
      * @return 裁好的位图（调用方负责在不再使用后 recycle）；无可用帧或出错返回 null
      */
+    @Synchronized
     fun grabRoi(screenRoi: Rect?): Bitmap? {
         if (!running) return null
         val r = reader ?: return null
@@ -162,6 +163,7 @@ class FrameGrabber(private val ctx: Context) {
     }
 
     /** 释放全部资源；可重复调用 */
+    @Synchronized
     fun stop() {
         running = false
         runCatching { display?.release() }

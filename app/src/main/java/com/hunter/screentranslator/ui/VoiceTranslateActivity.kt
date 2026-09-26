@@ -19,11 +19,14 @@ import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
 import android.util.Log
 import android.view.View
+import android.view.inputmethod.InputMethodManager
 import android.widget.ScrollView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.widget.PopupMenu
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.R
@@ -31,7 +34,6 @@ import com.hunter.screentranslator.api.EngineReadiness
 import com.hunter.screentranslator.api.TranslationEngine
 import com.hunter.screentranslator.api.TranslatorFactory
 import com.hunter.screentranslator.api.WhisperClient
-import com.hunter.screentranslator.api.engineReadiness
 import com.hunter.screentranslator.databinding.ActivityVoiceTranslateBinding
 import com.hunter.screentranslator.service.AudioSegmenter
 import com.hunter.screentranslator.util.EdgeToEdge
@@ -85,6 +87,7 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
 
     /** 当前实际用的是哪一种识别器，只用于诊断展示 */
     private var recognizerKind = "未创建"
+    private var usingOnDeviceRecognizer = false
 
     /**
      * 刚刚已经就"语言包缺失"给过用户引导了。
@@ -229,14 +232,14 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
      *   SodaLPDirGenerator: Returning no LP, as MDD does not support locale: zh-CN.
      *   SodaSpeechRecognizer: Failed to get language pack of required locale: error 12
      *
-     * `zh-CN` 在它的表里根本不存在 —— cmn = 现代标准汉语，Hans = 简体。
-     * 把它当 `zh-CN` 发过去时引擎连查都查不到，直接判无包并关掉会话
-     * （用户看到的就是"按钮点一下就弹回"）。凡是下发中文的地方都必须用
-     * `cmn-Hans-CN`，[listenLangs] 里也已经这么写。
+     * `zh-CN` 在 SODA 的表里不存在 —— cmn = 现代标准汉语，Hans = 简体。
+     * 但旧版的系统默认识别器接受通用的 `zh-CN`。两种识别器的中文标签
+     * 不能混用：设备端用 [listenLangs]，系统默认服务用 [systemLanguageTag]。
      */
 
     // ===== Whisper 引擎模式（v1.7.0）=====
     private var useWhisper = false
+    private var useIme = false
     private var audioRecord: AudioRecord? = null
     private var captureThread: Thread? = null
     private val whisperMutex = Mutex()   // 转写串行，避免结果乱序
@@ -252,6 +255,7 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
         // 本 App 要对付的典型设备恰恰是"ROM 把听写服务对三方 App 藏了"那一类，
         // 这类设备上系统识别是**一定失败**的。默认给它 = 用户一进页面就撞墙，
         // 表现是"按下没反应"。跟着能力走，第一屏就是能用的。
+        useIme = App.prefs.voiceEngine == "ime"
         useWhisper = if (App.prefs.voiceEngineChosen) {
             App.prefs.voiceEngine == "whisper"
         } else {
@@ -263,15 +267,23 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
         refreshEngineUi()
 
         b.topAppBar.setNavigationOnClickListener { finish() }
+        b.topAppBar.setOnMenuItemClickListener {
+            if (it.itemId == R.id.action_system_speech_guide) {
+                showSystemSpeechGuide()
+                true
+            } else false
+        }
 
-        b.btnEngine.setOnClickListener {
-            if (listening) {
-                toast(getString(R.string.voice_translate_t07))
-                return@setOnClickListener
-            }
-            useWhisper = !useWhisper
-            App.prefs.voiceEngine = if (useWhisper) "whisper" else "system"
-            refreshEngineUi()
+        b.btnEngine.setOnClickListener { showInputModeMenu() }
+
+        b.btnImePicker.setOnClickListener {
+            (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .showInputMethodPicker()
+        }
+        b.btnImeTranslate.setOnClickListener { submitImeInput() }
+        b.etImeInput.addTextChangedListener {
+            b.imeInputLayout.error = null
+            if (!it.isNullOrBlank()) b.tvHeard.text = it.toString()
         }
 
         // ---- 识别语言下拉框（v1.24.0 回归）----
@@ -349,6 +361,11 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
         Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
                 SpeechRecognizer.isOnDeviceRecognitionAvailable(this)
 
+    private fun systemLanguageTag(): String =
+        if (listenLangs[langIndex] == "cmn-Hans-CN")
+            java.util.Locale.SIMPLIFIED_CHINESE.toLanguageTag()
+        else listenLangs[langIndex]
+
     /**
      * 系统里有没有**语音输入法**（IME）通道。
      *
@@ -367,6 +384,7 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
             it == "com.google.android.tts" ||
                     it.contains("sogou", true) ||
                     it.contains("iflytek", true) ||
+                    it.contains("wetype", true) ||
                     it.contains("baidu", true)
         }
     }
@@ -482,7 +500,16 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
      * 结论直接写在提示条上。
      */
     private fun refreshEngineUi() {
-        b.btnEngine.text = if (useWhisper) "引擎：Whisper" else "引擎：手机系统"
+        b.btnEngine.text = when {
+            useIme -> "输入方式：输入法"
+            useWhisper -> "输入方式：Whisper"
+            else -> "输入方式：手机系统"
+        }
+        b.imeInputPanel.visibility = if (useIme) View.VISIBLE else View.GONE
+        if (!listening) {
+            b.btnToggle.text = if (useIme) getString(R.string.voice_translate_ime_open)
+            else getString(R.string.voice_translate_btn_toggle)
+        }
 
         // v1.26.0：提示条现在服务**两件**可能各自坏掉的事 ——
         // ① 听写（这个系统有没有开放语音识别服务）；② 翻译（引擎配密钥了没有）。
@@ -492,8 +519,8 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
         //
         // 优先级：先报翻译（更容易修、且影响所有翻译功能），再报听写。
         val engine = TranslationEngine.fromKey(App.prefs.engine)
-        val engineReady = engineReadiness(engine) { App.prefs.raw(it) } is EngineReadiness.Ready
-        val noRecognizer = !useWhisper && !hasSystemRecognizer()
+        val engineReady = App.prefs.readiness(engine) is EngineReadiness.Ready
+        val noRecognizer = !useWhisper && !useIme && !hasSystemRecognizer()
 
         b.hintBar.visibility = if (!engineReady || noRecognizer) View.VISIBLE else View.GONE
         when {
@@ -533,6 +560,81 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
         }
     }
 
+    private fun showInputModeMenu() {
+        val modes = arrayOf("system", "whisper", "ime")
+        val names = arrayOf("手机系统听写", "Whisper 听写", "输入法听写")
+        val selected = when {
+            useIme -> 2
+            useWhisper -> 1
+            else -> 0
+        }
+        PopupMenu(this, b.btnEngine).apply {
+            names.forEachIndexed { index, name ->
+                menu.add(0, index, index, name).apply {
+                    isCheckable = true
+                    isChecked = index == selected
+                }
+            }
+            setOnMenuItemClickListener {
+                selectInputMode(modes[it.itemId])
+                true
+            }
+            show()
+        }
+    }
+
+    private fun selectInputMode(mode: String) {
+        if (listening) stopAll()
+        if (useIme && mode != "ime") {
+            (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .hideSoftInputFromWindow(b.etImeInput.windowToken, 0)
+            b.etImeInput.clearFocus()
+        }
+        useIme = mode == "ime"
+        useWhisper = mode == "whisper"
+        App.prefs.voiceEngine = mode
+        refreshEngineUi()
+        if (useIme) openImeInput()
+    }
+
+    private fun openImeInput() {
+        b.imeInputPanel.visibility = View.VISIBLE
+        b.etImeInput.requestFocus()
+        b.etImeInput.post {
+            (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+                .showSoftInput(b.etImeInput, InputMethodManager.SHOW_IMPLICIT)
+        }
+    }
+
+    private fun submitImeInput() {
+        val text = b.etImeInput.text?.toString()?.trim().orEmpty()
+        if (text.isEmpty()) {
+            b.imeInputLayout.error = getString(R.string.voice_translate_ime_empty)
+            b.etImeInput.requestFocus()
+            return
+        }
+        val engine = TranslationEngine.fromKey(App.prefs.engine)
+        if (App.prefs.readiness(engine) is EngineReadiness.NotReady) {
+            warnEngineNotReady(engine) { submitImeInput() }
+            return
+        }
+        b.imeInputLayout.error = null
+        b.tvHeard.text = text
+        b.etImeInput.clearFocus()
+        (getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager)
+            .hideSoftInputFromWindow(b.etImeInput.windowToken, 0)
+        translate(text, isFinal = true)
+    }
+
+    private fun showSystemSpeechGuide() {
+        AlertDialog.Builder(this)
+            .setTitle(R.string.voice_translate_system_guide)
+            .setMessage(R.string.voice_translate_system_guide_body)
+            .setPositiveButton("打开系统语音设置") { _, _ -> openSystemVoiceSettings() }
+            .setNegativeButton("关闭", null)
+            .show()
+    }
+
     /** 提示条右侧那个「处理」按钮当前该做什么（v1.26.0：同一位置服务两种故障） */
     private enum class SpeechFix { SPEECH, ENGINE }
 
@@ -550,6 +652,10 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
     }
 
     private fun toggle() {
+        if (useIme) {
+            openImeInput()
+            return
+        }
         if (listening) {
             stopAll()
         } else {
@@ -587,7 +693,7 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
         // 这道闸门只拦"铁定翻不了"的情况；识别语言包、麦克风权限等
         // 各自有各自的提示，不在这里重复。
         val engine = TranslationEngine.fromKey(App.prefs.engine)
-        if (engineReadiness(engine) { App.prefs.raw(it) } is EngineReadiness.NotReady) {
+        if (App.prefs.readiness(engine) is EngineReadiness.NotReady) {
             warnEngineNotReady(engine)
             return
         }
@@ -606,8 +712,11 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
      *  · 去配置引擎 —— 想长期用正式引擎的人走这条。
      *  · 取消。
      */
-    private fun warnEngineNotReady(engine: TranslationEngine) {
-        val reason = (engineReadiness(engine) { App.prefs.raw(it) } as? EngineReadiness.NotReady)
+    private fun warnEngineNotReady(
+        engine: TranslationEngine,
+        onReady: () -> Unit = { reallyStart() }
+    ) {
+        val reason = (App.prefs.readiness(engine) as? EngineReadiness.NotReady)
             ?.reason ?: "翻译引擎还没有配置"
         // 已经就是必应网页版却仍未配好，属于异常情况（它的 keyless=true 恒为 Ready），
         // 这时不该再显示"切到必应"这个按钮。
@@ -620,7 +729,7 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
                         "语音翻译分「听写」和「翻译」两步 —— 听写能跑，但翻译这步会失败，" +
                         "所以译文栏一直是空的。\n\n" +
                         if (canUseBing)
-                            "最省事：点下面的「改用必应网页版」，它免费且不需要密钥，点完就能开始说。\n" +
+                            "最省事：点下面的「改用必应网页版」，它免费且不需要密钥，点完就能继续翻译。\n" +
                                     "缺点：走的是必应网页自用接口，随时可能失效，只适合先用着。\n" +
                                     "想长期稳定：选「去配置引擎」，填一家正式引擎的密钥。"
                         else
@@ -631,9 +740,8 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
             ) { _, _ ->
                 if (canUseBing) {
                     App.prefs.engine = TranslationEngine.BING_WEB.key
-                    toast("已切到必应网页版，开始说吧")
-                    // 切完立刻重新走一次入口，用户点"继续"的意图不该再被打断一次。
-                    reallyStart()
+                    toast("已切到必应网页版")
+                    onReady()
                 } else {
                     startActivity(Intent(this, EngineSettingsActivity::class.java))
                 }
@@ -661,20 +769,28 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
      *  - `createSpeechRecognizer()`：服务不存在时照样返回对象，但它随后只会回
      *    ERROR_CLIENT。这种"看起来建成功了"的情况由 [onError] 兜底。
      *
-     * 所以这里是"先试设备端，拿不到就退回默认网络识别器"，两条都拿不到才判失败。
+     * 优先使用系统默认识别器，与旧版保持一致。设备端识别器只在默认服务
+     * 不可用时兜底；它可能要求另行下载语言包，不能仅凭能力声明就抢走默认路径。
      * 返回 false 时调用方必须把界面回滚，绝不能停在"正在聆听"。
      */
     private fun ensureRecognizer(): Boolean {
         if (recognizer != null) return true
         val created = runCatching {
-            if (hasOnDeviceRecognizer()) {
-                SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
-                    ?.also { recognizerKind = "设备端(on-device)" }
-                    ?: SpeechRecognizer.createSpeechRecognizer(this)
-                        ?.also { recognizerKind = "默认网络识别器(on-device 拿不到)" }
-            } else {
+            val default = if (SpeechRecognizer.isRecognitionAvailable(this)) {
                 SpeechRecognizer.createSpeechRecognizer(this)
-                    ?.also { recognizerKind = "默认网络识别器" }
+                    ?.also {
+                        usingOnDeviceRecognizer = false
+                        recognizerKind = "系统默认识别器"
+                    }
+            } else null
+            default ?: if (hasOnDeviceRecognizer()) {
+                SpeechRecognizer.createOnDeviceSpeechRecognizer(this)
+                    ?.also {
+                        usingOnDeviceRecognizer = true
+                        recognizerKind = "设备端识别器(默认服务不可用)"
+                    }
+            } else {
+                null
             }
         }.onFailure {
             Log.w(TAG, "创建识别器抛异常: $it")
@@ -711,7 +827,7 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
         // 他可能刚去下完包回来，这次该由真实结果说话。
         languagePackAdvised = false
         listening = true
-        b.btnToggle.text = getString(R.string.video_listen_btn_stop)
+        b.btnToggle.text = getString(R.string.voice_translate_btn_stop)
         refreshListeningHint()
         startListening()
     }
@@ -961,9 +1077,7 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
 
     /** 切到 Whisper 引擎。三处调用点共用，避免再复制一遍这几行。 */
     private fun switchToWhisper() {
-        useWhisper = true
-        App.prefs.voiceEngine = "whisper"
-        refreshEngineUi()
+        selectInputMode("whisper")
         toast("已切到 Whisper（需在设置里配好语音识别地址与 Key），点「开始」即可")
     }
 
@@ -1108,10 +1222,8 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
     private fun launchSpeechActivity() {
         val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
-            // v1.24.0：与 [startListening] 同样下发用户选的语言。
-            // 系统语音输入界面走 Activity 通道，但同样需要语言才能出正确字形
-            // （不下发时它按系统语言硬解，日语会出罗马音）。
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, listenLangs[langIndex])
+            // 系统语音输入界面使用通用 BCP-47 标签，中文不使用 SODA 专用标签。
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE, systemLanguageTag())
             putExtra(RecognizerIntent.EXTRA_PROMPT, "请说话")
         }
         val opened = runCatching { speechActivityLauncher.launch(intent) }.isSuccess
@@ -1144,11 +1256,12 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
             //   不下发语言 → `konichiwa`（引擎按系统 zh-CN 硬解，出罗马音）
             //   下发 ja-JP  → `ハロー`     （引擎用日语模型，出正确片假名）
             //
-            // 注意这里下发的是**用户明确选过的语言**（或按系统语言推断的默认值），
-            // 全是 SODA 认得的标准标签 —— 不会再出现 v1.20 那种"指到 zh-CN
-            // 导致引擎判无包、当场关会话"的情况（[listenLangs] 里中文写的是
-            // cmn-Hans-CN，不是 zh-CN）。
-            putExtra(RecognizerIntent.EXTRA_LANGUAGE, listenLangs[langIndex])
+            // 系统默认服务沿用旧版的通用中文标签；只有设备端 SODA 使用
+            // cmn-Hans-CN。语言选项仍由用户选择或按系统语言推断。
+            putExtra(
+                RecognizerIntent.EXTRA_LANGUAGE,
+                if (usingOnDeviceRecognizer) listenLangs[langIndex] else systemLanguageTag()
+            )
             putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
         }
@@ -1217,9 +1330,7 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
             }
             if (sysOk) {
                 dlg.setNeutralButton("改用系统识别") { _, _ ->
-                    useWhisper = false
-                    App.prefs.voiceEngine = "system"
-                    refreshEngineUi()
+                    selectInputMode("system")
                     reallyStart()
                 }
             }
@@ -1251,7 +1362,7 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
 
         audioRecord = record
         listening = true
-        b.btnToggle.text = getString(R.string.video_listen_btn_stop)
+        b.btnToggle.text = getString(R.string.voice_translate_btn_stop)
         b.tvStatus.text = getString(R.string.voice_translate_t05)
 
         // v1.24.0：Whisper 的 langHint 也按用户选的语言下发（ISO-639-3 前缀）：
@@ -1318,8 +1429,8 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
     // ============================ RecognitionListener（系统引擎） ============================
 
     override fun onReadyForSpeech(params: Bundle?) {
-        // 能进到这里说明服务真的绑定上了，之前的重试计数不该再累计。
-        consecutiveErrors = 0
+        // 服务绑定成功不等于识别成功；网络错误后重连也会回调这里。
+        // 只有真正返回文字时才能清零，否则网络错误会无限重试。
         b.tvStatus.text = "● 正在聆听（说 ${listenLangNames[langIndex]}）"
     }
 
@@ -1394,8 +1505,8 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
             // 引擎仍会回 12/13 —— 这一支必须留着，且要直接给下载入口。
             SpeechRecognizer.ERROR_LANGUAGE_UNAVAILABLE,
             SpeechRecognizer.ERROR_LANGUAGE_NOT_SUPPORTED -> {
-                b.tvStatus.text = "● 缺少识别语言包"
                 stopAll()
+                b.tvStatus.text = "● 缺少识别语言包"
                 // 置位后再弹：紧跟其后的 ERROR_CLIENT(5) 会被上面的分支忽略掉，
                 // 否则它会 stopAll() 把刚弹出的对话框一起带走（真机实测）。
                 languagePackAdvised = true
@@ -1403,8 +1514,8 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
             }
 
             SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> {
-                b.tvStatus.text = "● $name"
                 stopAll()
+                b.tvStatus.text = "● $name"
                 startWithPermission()
             }
 
@@ -1417,8 +1528,8 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
                 consecutiveErrors++
                 if (consecutiveErrors >= maxConsecutiveErrors) {
                     // 连续失败说明这条路根本走不通，别再 300ms 一次地空转了。
-                    b.tvStatus.text = "● 识别失败：$name"
                     stopAll()
+                    b.tvStatus.text = "● 识别失败：$name"
                     showSpeechHelp(name)
                 } else if (listening) {
                     b.tvStatus.text = "● $name，重试中（$consecutiveErrors/$maxConsecutiveErrors）"

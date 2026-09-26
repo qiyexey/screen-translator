@@ -8,15 +8,20 @@ import android.os.Bundle
 import android.provider.Settings
 import android.view.View
 import androidx.appcompat.app.AlertDialog
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.slider.Slider
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.R
 import com.hunter.screentranslator.api.TranslationEngine
+import com.hunter.screentranslator.api.EngineReadiness
 import com.hunter.screentranslator.databinding.ActivityLiveTranslateBinding
 import com.hunter.screentranslator.service.LiveTranslateService
 import com.hunter.screentranslator.util.EdgeToEdge
 import com.hunter.screentranslator.util.LiveOverlayMode
 import com.hunter.screentranslator.util.Roi
+import kotlinx.coroutines.launch
 
 /**
  * 实时屏幕翻译控制页（v1.15.0）。
@@ -45,7 +50,7 @@ class LiveTranslateActivity : BaseActivity() {
 
         b.btnStart.setOnClickListener { start() }
         b.btnStop.setOnClickListener {
-            stopService(Intent(this, LiveTranslateService::class.java))
+            LiveTranslateService.stop(this)
             toast(getString(R.string.live_translate_t20))
             refresh()
         }
@@ -53,13 +58,12 @@ class LiveTranslateActivity : BaseActivity() {
             if (!LiveTranslateService.isRunning()) return@setOnClickListener
             LiveTranslateService.sendAction(
                 this,
-                if (pausedLocal) LiveTranslateService.ACTION_RESUME
+                if (LiveTranslateService.state.value.phase == LiveTranslateService.Phase.PAUSED) LiveTranslateService.ACTION_RESUME
                 else LiveTranslateService.ACTION_PAUSE
             )
-            pausedLocal = !pausedLocal
-            // 服务端改状态是异步的，这里立刻回读会读到旧值；先按本地状态画，
-            // 回到前台时 onResume → refresh() 会以服务端为准纠正过来。
-            refresh()
+        }
+        b.btnRetry.setOnClickListener {
+            LiveTranslateService.sendAction(this, LiveTranslateService.ACTION_RETRY)
         }
         b.btnPickRoi.setOnClickListener { pickRoi() }
         // v1.15.15：本机日文 OCR 自检 —— 决定"免费链路"可不可行
@@ -80,10 +84,12 @@ class LiveTranslateActivity : BaseActivity() {
             LiveTranslateService.sendAction(this, LiveTranslateService.ACTION_DRAG)
             moveTaskToBack(true)
         }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                LiveTranslateService.state.collect { refresh() }
+            }
+        }
     }
-
-    /** 本页自己记的暂停态。只用于按钮文案，真实状态以服务里为准（onResume 会纠正） */
-    private var pausedLocal = false
 
     override fun onResume() {
         super.onResume()
@@ -251,6 +257,7 @@ class LiveTranslateActivity : BaseActivity() {
         b.switchTouchable.isChecked = App.prefs.liveOverlayTouchable
         b.switchTouchable.setOnCheckedChangeListener { _, checked ->
             App.prefs.liveOverlayTouchable = checked
+            LiveTranslateService.sendAction(this, LiveTranslateService.ACTION_REPOSITION)
             toast(if (checked) "叠层可触摸：会拦住那一块的点击" else "叠层不再吃触摸")
         }
     }
@@ -258,6 +265,18 @@ class LiveTranslateActivity : BaseActivity() {
     // ==================== 启动 ====================
 
     private fun start() {
+        val readiness = App.prefs.readiness()
+        if (readiness is EngineReadiness.NotReady) {
+            AlertDialog.Builder(this)
+                .setTitle("引擎尚未配置")
+                .setMessage(readiness.reason)
+                .setPositiveButton("去设置") { _, _ ->
+                    startActivity(Intent(this, EngineSettingsActivity::class.java))
+                }
+                .setNegativeButton("取消", null)
+                .show()
+            return
+        }
         // v1.15.22：删掉"当前引擎不能读图"的拦截弹窗。
         // 那个提示是 v1.15.16 加的"警告但不拦"，但现在**已经过时**：
         // 引擎读不了图时会**自动改走「本机 OCR + 文本翻译」**（见 LiveTranslateService），
@@ -298,17 +317,12 @@ class LiveTranslateActivity : BaseActivity() {
             toast(getString(R.string.live_translate_t22))
             return
         }
-        val intent = Intent(this, LiveTranslateService::class.java).apply {
-            putExtra(LiveTranslateService.EXTRA_RESULT_CODE, resultCode)
-            putExtra(LiveTranslateService.EXTRA_RESULT_DATA, data)
+        try {
+            LiveTranslateService.startCapture(this, resultCode, data)
+            toast(getString(R.string.live_translate_t21))
+        } catch (e: RuntimeException) {
+            toast("启动失败：${e.message ?: "请重新授权屏幕捕获"}")
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            startForegroundService(intent)
-        } else {
-            startService(intent)
-        }
-        pausedLocal = false
-        toast(getString(R.string.live_translate_t21))
         refresh()
     }
 
@@ -330,24 +344,42 @@ class LiveTranslateActivity : BaseActivity() {
     // ==================== 状态刷新 ====================
 
     private fun refresh() {
-        val running = LiveTranslateService.isRunning()
-        b.tvRunStatus.text = if (running) "✅ 运行中" else "未运行"
+        val phase = LiveTranslateService.state.value.phase
+        val running = phase != LiveTranslateService.Phase.STOPPED
+        val busy = phase == LiveTranslateService.Phase.STARTING || phase == LiveTranslateService.Phase.STOPPING
+        b.tvRunStatus.text = when (phase) {
+            LiveTranslateService.Phase.STOPPED -> "未运行"
+            LiveTranslateService.Phase.STARTING -> "正在启动"
+            LiveTranslateService.Phase.STOPPING -> "正在停止"
+            LiveTranslateService.Phase.PAUSED -> "已暂停"
+            LiveTranslateService.Phase.PICKING -> "正在框选"
+            LiveTranslateService.Phase.RETRYING -> "等待自动重试"
+            LiveTranslateService.Phase.RUNNING -> "运行中"
+        }
         b.btnStart.visibility = if (running) View.GONE else View.VISIBLE
         b.btnPause.visibility = if (running) View.VISIBLE else View.GONE
         b.btnStop.visibility = if (running) View.VISIBLE else View.GONE
-        b.btnPause.text = if (pausedLocal) "▶ 继续" else "⏸ 暂停"
-        b.btnPickRoi.isEnabled = running
+        b.btnPause.text = if (phase == LiveTranslateService.Phase.PAUSED) "▶ 继续" else "⏸ 暂停"
+        b.btnPause.isEnabled = running && !busy
+        b.btnStop.isEnabled = running && phase != LiveTranslateService.Phase.STOPPING
+        b.btnPickRoi.isEnabled = running && !busy
+        b.btnRetry.visibility = if (running) View.VISIBLE else View.GONE
+        b.btnRetry.isEnabled = running && !busy && phase != LiveTranslateService.Phase.PAUSED &&
+            phase != LiveTranslateService.Phase.PICKING
 
         // v1.15.26：这条状态原来写的是"不支持图片输入，无法使用" —— 已经**过时且误导**。
         // 引擎读不了图时会自动改走「本机 OCR + 文本翻译」，两种引擎都能用，只是链路不同。
-        // 现在如实写出各自走哪条链路，并且**都不再用报错色**（都不是错误）。
+        // 已配置时写出实际链路；尚未配置则展示共享判据给出的原因。
         val engine = TranslationEngine.fromKey(App.prefs.engine)
-        b.tvEngineStatus.text = if (engine.visionCapable) {
+        val readiness = App.prefs.readiness(engine)
+        b.tvEngineStatus.text = if (readiness is EngineReadiness.NotReady) {
+            "「${engine.displayName}」· ${readiness.reason}"
+        } else if (engine.visionCapable) {
             "✅「${engine.displayName}」· 读图模式：画面直接交给模型识别并翻译（按次计费）"
         } else {
-            "✅「${engine.displayName}」· 免费模式：本机 OCR 认字 → 只把文字发去翻译（图片不出设备）"
+            "✅「${engine.displayName}」· 本机识别 + 文本翻译（图片不出设备）"
         }
-        b.tvEngineStatus.setTextColor(resColor(R.color.md_success))
+        b.tvEngineStatus.setTextColor(resColor(if (readiness is EngineReadiness.Ready) R.color.md_success else R.color.md_error))
 
         // 选区状态：解析不出来 / 在当前屏幕下失效，都要如实说，不能让用户
         // 对着一句"已框选"发呆却永远等不到译文

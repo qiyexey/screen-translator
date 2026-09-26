@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_system_speech_guide"
+        android:icon="@drawable/ic_info"
+        android:title="@string/voice_translate_system_guide"
+        app:showAsAction="always" />
+</menu>

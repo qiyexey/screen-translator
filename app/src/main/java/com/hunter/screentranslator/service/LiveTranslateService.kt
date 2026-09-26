@@ -14,12 +14,14 @@ import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.IBinder
+import android.os.SystemClock
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
 import androidx.core.app.NotificationCompat
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.api.TranslationEngine
+import com.hunter.screentranslator.api.EngineReadiness
 import com.hunter.screentranslator.api.TranslatorFactory
 import com.hunter.screentranslator.overlay.LiveOverlayView
 import com.hunter.screentranslator.overlay.RoiPickerView
@@ -31,6 +33,8 @@ import com.hunter.screentranslator.util.LiveOverlayMode
 import com.hunter.screentranslator.util.OcrEngine
 import com.hunter.screentranslator.util.Roi
 import com.hunter.screentranslator.util.Speaker
+import com.hunter.screentranslator.util.TranslationRetry
+import com.hunter.screentranslator.util.TranslationSession
 import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -41,6 +45,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * 实时屏幕翻译服务（v1.15.0）。
@@ -89,7 +95,8 @@ class LiveTranslateService : Service() {
     @Volatile private var picking = false
     private var projection: MediaProjection? = null
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    // Serialize service controls and result commits; expensive capture/encoding stays off the UI thread.
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var loopJob: Job? = null
 
     /** 上一帧 OCR 到的逐行原文 / 对应的逐行译文（用于"只译新增行"） */
@@ -127,7 +134,8 @@ class LiveTranslateService : Service() {
     @Volatile private var hideWaitMs = CAPTURE_HIDE_MS
 
     /** 连续失败计数：连续失败时退避，避免对着同一张无法识别的图反复烧请求 */
-    private var failStreak = 0
+    private val retry = TranslationRetry()
+    private val session = TranslationSession()
 
     @Volatile private var paused = false
     @Volatile private var translating = false
@@ -154,17 +162,21 @@ class LiveTranslateService : Service() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         instance = this
+        mutableState.value = UiState(Phase.STARTING)
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                mutableState.value = UiState(Phase.STOPPING, requestCount)
+                session.invalidate()
                 stopSelf()
                 return START_NOT_STICKY
             }
             ACTION_PAUSE -> {
                 if (!running) { stopSelf(); return START_NOT_STICKY }
                 paused = true
+                session.invalidate()
                 overlay?.setStatus("已暂停")
                 notifyState()
                 return START_STICKY
@@ -174,10 +186,16 @@ class LiveTranslateService : Service() {
                 paused = false
                 // 恢复时把参照指纹清掉：暂停期间画面早就换了好几屏，
                 // 拿旧指纹当基准只会立刻误判成"变化"或永远判"没变"
-                refSig = null
-                changeStreak = 0
+                invalidateTranslation()
                 pollutedHits = 0
                 overlay?.setStatus("实时翻译 · 待机")
+                notifyState()
+                return START_STICKY
+            }
+            ACTION_RETRY -> {
+                if (!running) { stopSelf(); return START_NOT_STICKY }
+                invalidateTranslation()
+                overlay?.setStatus(if (paused) "已暂停" else "准备重试")
                 notifyState()
                 return START_STICKY
             }
@@ -195,6 +213,7 @@ class LiveTranslateService : Service() {
                 if (!running) { stopSelf(); return START_NOT_STICKY }
                 // 微调改了位置：立刻重摆一次叠层，不用等下一轮 tick
                 overlay?.applyStyle()
+                overlay?.applyTouchable()
                 Roi.parse(App.prefs.liveRoi)?.let {
                     appliedRoi = null
                     overlay?.applyGeometry(displayRect(it), windowManager)
@@ -222,10 +241,17 @@ class LiveTranslateService : Service() {
             return START_NOT_STICKY
         }
 
+        val readiness = App.prefs.readiness()
+        if (readiness is EngineReadiness.NotReady) {
+            Log.w(TAG, readiness.reason)
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         startForegroundCompat()
         addOverlay()
 
-        // 与 VideoListenService 同一顺序：先起前台服务，再拿 projection。
+        // 先起前台服务，再拿 projection。
         // 这个顺序在该 App 的内录功能上已经实测可用，保持一致比"理论上更对"更重要。
         val mp = runCatching {
             (getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager)
@@ -256,6 +282,7 @@ class LiveTranslateService : Service() {
         grabber = g
 
         running = true
+        notifyState()
         startLoop()
         val saved = setRoiFromPrefs()
         if (saved != null) {
@@ -386,6 +413,8 @@ class LiveTranslateService : Service() {
     private fun startRegionSelect() {
         if (regionSelect != null || picking) return
         picking = true
+        session.invalidate()
+        notifyState()
         scope.launch {
             // 从通知栏点「框选区域」时通知栏还开着，立刻抓帧会把通知栏（而且是被
             // 系统脱敏过的黑画面）冻成背景。先等它收起来。
@@ -446,6 +475,7 @@ class LiveTranslateService : Service() {
             regionSelect = null
         }
         picking = false
+        notifyState()
     }
 
     private fun endRegionSelect() {
@@ -455,6 +485,10 @@ class LiveTranslateService : Service() {
         // 位图还被 ImageView 引用着，必须等窗口移除之后再回收，否则是 use-after-free
         frozenFrame?.recycle()
         frozenFrame = null
+        if (running) {
+            invalidateTranslation()
+            notifyState()
+        }
     }
 
     // ============================ 主循环 ============================
@@ -476,6 +510,7 @@ class LiveTranslateService : Service() {
                     // 用户看到的是"翻译了第一句之后再也不动"，而且界面上没有任何提示
                     // （自捕获校验里那个 return 也是同类问题的另一面）。
                     loopFailures++
+                    if (running && !paused && !picking && regionSelect == null) scheduleRetry()
                     Log.e(TAG, "主循环单轮异常（第 $loopFailures 次），已跳过继续", e)
                     if (loopFailures <= 3) {
                         overlay?.showMessage(
@@ -489,6 +524,20 @@ class LiveTranslateService : Service() {
     }
 
     private suspend fun tick() {
+        val currentConfiguration = App.prefs.translationConfiguration()
+        if (session.updateConfiguration(currentConfiguration)) {
+            invalidateTranslation()
+            overlay?.showMessage("配置已更新", "等待重新翻译")
+            notifyState()
+        }
+        if (!retry.canAttempt(SystemClock.elapsedRealtime())) return
+        val readiness = App.prefs.readiness()
+        if (readiness is EngineReadiness.NotReady) {
+            notice("引擎尚未配置", readiness.reason)
+            scheduleRetry()
+            return
+        }
+        val epoch = session.generation
         val g = grabber ?: return
         val roi = setRoiFromPrefs() ?: return
 
@@ -503,37 +552,38 @@ class LiveTranslateService : Service() {
         // 覆盖模式每轮藏 hideWaitMs，代价就是闪烁，由用户自己选）
         val needHide = App.prefs.liveOverlayMode == LiveOverlayMode.COVER &&
             overlay?.hasContent() == true
-        if (needHide) {
-            overlay?.setCaptureHidden(true, windowManager)
-            delay(hideWaitMs)
-        }
-        val crop = g.grabRoi(roi)
-
-        // ---- 自捕获校验（v1.15.5 改为**同一轮内当场对比**）----
-        //
-        // 旧做法：把"叠层可见时的样貌"记在 pollutedSig 里，之后每轮拿新帧去比。
-        // 实测**必然误判**：叠层是半透明的，"藏起来"和"露出来"两帧差异本来就小，
-        // 于是每一轮都被判成"抓到自己"→ 每轮 return → 连续 8 次后放宽 →
-        // 用户看到的就是"只翻译了第一句、之后一直不动"。
-        //
-        // 现在改成：这一轮**先藏起来抓一帧**（A），**再露出来抓一帧**（B），
-        // 当场比 A 与 B：
-        //   A 与 B 差别明显 → 说明"藏"确实生效 → A 是干净的游戏画面，可用
-        //   A 与 B 几乎一样 → 说明"藏"根本没生效 → A 里就含着我们自己的译文
-        // 同一轮的数据自比，不存在"跟过期指纹比"的误判。
-        var visibleSig: IntArray? = null
-        if (needHide) {
-            overlay?.setCaptureHidden(false, windowManager)
-            delay(VERIFY_VISIBLE_MS)
-            g.grabRoi(roi)?.let {
-                try { visibleSig = signature.of(it) } finally { it.recycle() }
-            }
-        }
-
-        if (crop == null) return
-
+        var crop: Bitmap? = null
         try {
-            val sig = signature.of(crop)
+            if (needHide) {
+                overlay?.setCaptureHidden(true, windowManager)
+                delay(hideWaitMs)
+            }
+            withContext(Dispatchers.Default) { crop = g.grabRoi(roi) }
+            val frame = crop ?: return
+
+            // ---- 自捕获校验（v1.15.5 改为**同一轮内当场对比**）----
+            //
+            // 旧做法：把"叠层可见时的样貌"记在 pollutedSig 里，之后每轮拿新帧去比。
+            // 实测**必然误判**：叠层是半透明的，"藏起来"和"露出来"两帧差异本来就小，
+            // 于是每一轮都被判成"抓到自己"→ 每轮 return → 连续 8 次后放宽 →
+            // 用户看到的就是"只翻译了第一句、之后一直不动"。
+            //
+            // 现在改成：这一轮**先藏起来抓一帧**（A），**再露出来抓一帧**（B），
+            // 当场比 A 与 B：
+            //   A 与 B 差别明显 → 说明"藏"确实生效 → A 是干净的游戏画面，可用
+            //   A 与 B 几乎一样 → 说明"藏"根本没生效 → A 里就含着我们自己的译文
+            // 同一轮的数据自比，不存在"跟过期指纹比"的误判。
+            var visibleSig: IntArray? = null
+            if (needHide) {
+                overlay?.setCaptureHidden(false, windowManager)
+                delay(VERIFY_VISIBLE_MS)
+                g.grabRoi(roi)?.let {
+                    try { visibleSig = signature.of(it) } finally { it.recycle() }
+                }
+            }
+
+            if (!isRequestCurrent(epoch)) return
+            val sig = signature.of(frame)
 
             if (needHide && visibleSig != null &&
                 FrameSignature.diff(sig, visibleSig) < POLLUTED_MAX
@@ -575,19 +625,59 @@ class LiveTranslateService : Service() {
             changeStreak++
             if (!isFirst && changeStreak < CHANGE_STREAK) return
 
-            refSig = sig
             changeStreak = 0
 
             val hash = FrameSignature.hash(sig)
             memo[hash]?.let {
+                refSig = sig
+                retry.reset()
+                // A cached image may not correspond to the OCR prefix kept from the previous screen.
+                lastOcrLines = emptyList()
+                lastTranslatedLines = emptyList()
                 overlay?.showResult(it, fromCache = true)
+                notifyState()
                 return
             }
 
-            translate(crop, hash)
+            when (translate(frame, hash, epoch)) {
+                Attempt.ACCEPTED -> {
+                    if (isRequestCurrent(epoch)) {
+                        refSig = sig
+                        retry.reset()
+                    }
+                }
+                Attempt.FAILED -> if (isRequestCurrent(epoch)) scheduleRetry()
+                Attempt.STALE -> Unit
+            }
+            notifyState()
         } finally {
-            crop.recycle()
+            if (needHide) overlay?.setCaptureHidden(false, windowManager)
+            crop?.recycle()
         }
+    }
+
+    private enum class Attempt { ACCEPTED, FAILED, STALE }
+
+    private fun invalidateTranslation() {
+        session.invalidate()
+        refSig = null
+        changeStreak = 0
+        memo.clear()
+        lastOcrLines = emptyList()
+        lastTranslatedLines = emptyList()
+        retry.reset()
+        lastNotice = null
+    }
+
+    private fun isRequestCurrent(epoch: Long): Boolean = running && !paused && !picking && regionSelect == null &&
+        session.isCurrent(epoch, App.prefs.translationConfiguration())
+
+    private fun scheduleRetry() {
+        refSig = null
+        changeStreak = 0
+        val wait = retry.failed(SystemClock.elapsedRealtime())
+        overlay?.setStatus("翻译失败，${wait / 1000} 秒后重试")
+        notifyState()
     }
 
     /**
@@ -622,13 +712,10 @@ class LiveTranslateService : Service() {
      * 安全护栏：模型返回的行数必须与送出的行数**一一对应**，否则**退回整框重译**。
      * 错位（把 A 行译文贴到 B 行）比重复翻译糟糕得多，宁可多花一次请求。
      */
-    private suspend fun translateByOnDeviceOcr(crop: android.graphics.Bitmap, hash: Int) {
+    private suspend fun translateByOnDeviceOcr(crop: Bitmap, hash: Int, epoch: Long): Attempt {
         overlay?.showTranslating()
-        val lines = runCatching { OcrEngine.recognizeJapanese(crop) }
-            .getOrElse {
-                Log.w(TAG, "本机 OCR 异常: $it")
-                emptyList()
-            }
+        val lines = OcrEngine.recognizeJapanese(crop, throwOnFailure = true)
+        if (!isRequestCurrent(epoch)) return Attempt.STALE
         val newLines = lines.map { it.text.trim() }.filter { it.isNotEmpty() }
 
         if (newLines.isEmpty()) {
@@ -638,7 +725,8 @@ class LiveTranslateService : Service() {
                 Log.i(TAG, "本机 OCR 连续 $ocrEmptyStreak 轮未认出文字（空闲或认不出）")
                 ocrEmptyStreak = 0
             }
-            return
+            overlay?.setStatus("实时翻译 · 未识别到文字")
+            return Attempt.ACCEPTED
         }
         ocrEmptyStreak = 0
 
@@ -648,7 +736,10 @@ class LiveTranslateService : Service() {
         // 文字和上一帧完全一样（画面变了但字没变，例如闪烁光标）→ 不发请求
         if (keep == newLines.size && keep == lastOcrLines.size) {
             Log.i(TAG, "文字未变，跳过请求")
-            return
+            val text = lastTranslatedLines.joinToString("\n")
+            memo[hash] = text
+            overlay?.showResult(text, fromCache = true)
+            return Attempt.ACCEPTED
         }
         if (from >= newLines.size) from = 0
         val pending = newLines.subList(from, newLines.size)
@@ -658,16 +749,15 @@ class LiveTranslateService : Service() {
         val result = TranslatorFactory.current().translate(src, App.prefs.targetLang, App.prefs.sourceLang)
         requestCount++
         notifyState()
+        if (!isRequestCurrent(epoch)) return Attempt.STALE
 
         val out = result.getOrNull()
         if (out.isNullOrBlank()) {
-            failStreak++
             val e = result.exceptionOrNull()
-            Log.e(TAG, "本机OCR 后翻译失败（连续 $failStreak 次）", e)
+            Log.e(TAG, "本机OCR 后翻译失败", e)
             overlay?.showMessage("❌ 翻译失败", e?.message?.take(60) ?: "未知错误")
-            return
+            return Attempt.FAILED
         }
-        failStreak = 0
 
         val got = out.trim().split('\n').map { it.trim() }.filter { it.isNotEmpty() }
         if (got.size == pending.size) {
@@ -689,16 +779,20 @@ class LiveTranslateService : Service() {
                 .translate(newLines.joinToString("\n"), App.prefs.targetLang, App.prefs.sourceLang)
             requestCount++
             notifyState()
+            if (!isRequestCurrent(epoch)) return Attempt.STALE
             val allOut = all.getOrNull()
             if (allOut.isNullOrBlank()) {
                 overlay?.showMessage("❌ 翻译失败", all.exceptionOrNull()?.message?.take(60) ?: "未知错误")
-                return
+                return Attempt.FAILED
             }
-            lastOcrLines = newLines
-            lastTranslatedLines = allOut.trim().split('\n').map { it.trim() }
+            val translated = allOut.trim().split('\n').map { it.trim() }.filter { it.isNotEmpty() }
+            // Only reuse a prefix when there is a proven one-to-one line mapping.
+            lastOcrLines = if (translated.size == newLines.size) newLines else emptyList()
+            lastTranslatedLines = if (translated.size == newLines.size) translated else emptyList()
             memo[hash] = allOut
             overlay?.showResult(allOut)
         }
+        return Attempt.ACCEPTED
     }
 
     /**
@@ -744,21 +838,21 @@ class LiveTranslateService : Service() {
         return dp[b.length]
     }
 
-    private suspend fun translate(crop: android.graphics.Bitmap, hash: Int) {
-        if (translating) return
+    private suspend fun translate(crop: Bitmap, hash: Int, epoch: Long): Attempt {
+        if (translating) return Attempt.STALE
         translating = true
         try {
             // v1.15.17：引擎不支持视觉时**自动改走本机 OCR**。
             // 之前这里一律送图，于是配纯文本引擎（例如免密钥的必应网页端）时
             // 每一轮都必然失败，用户看到的就是「当前引擎不支持图片输入」。
             if (!TranslationEngine.fromKey(App.prefs.engine).visionCapable) {
-                translateByOnDeviceOcr(crop, hash)
-                return
+                return translateByOnDeviceOcr(crop, hash, epoch)
             }
-            val bytes = ImageCompress.toJpeg(crop)
+            val bytes = withContext(Dispatchers.Default) { ImageCompress.toJpeg(crop) }
+            if (!isRequestCurrent(epoch)) return Attempt.STALE
             if (bytes == null) {
                 overlay?.showMessage("❌ 图片编码失败", "")
-                return
+                return Attempt.FAILED
             }
             overlay?.showTranslating()
 
@@ -766,19 +860,22 @@ class LiveTranslateService : Service() {
             //   · 图里确实是对话框正文、译文却对不上 → 模型编造（提示词问题）
             //   · 图里根本不是那段文字（含状态栏/位置偏了）→ 选区坐标问题
             // 没有它，只能靠猜。控制页可回看这张图。
-            runCatching {
-                java.io.File(cacheDir, LAST_CROP_NAME).writeBytes(bytes)
-            }.onFailure { Log.w(TAG, "落盘最近一次取图失败: $it") }
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    java.io.File(cacheDir, LAST_CROP_NAME).writeBytes(bytes)
+                }.onFailure { Log.w(TAG, "落盘最近一次取图失败: $it") }
+            }
+            if (!isRequestCurrent(epoch)) return Attempt.STALE
 
-            val result = TranslatorFactory.current()
+            val result = TranslatorFactory.current(useCache = false)
                 .translateImage(bytes, "image/jpeg", App.prefs.targetLang, GAME_HINT, App.prefs.sourceLang)
 
             requestCount++
             notifyState()
+            if (!isRequestCurrent(epoch)) return Attempt.STALE
 
             val out = result.getOrNull()
             if (out != null) {
-                failStreak = 0
                 val clean = out.trim()
                 if (clean.isBlank()) {
                     notice("实时翻译 · 未识别到文字", "")
@@ -791,16 +888,12 @@ class LiveTranslateService : Service() {
                         runCatching { Speaker.speakContent(this, "", clean) }
                     }
                 }
+                return Attempt.ACCEPTED
             } else {
                 val e = result.exceptionOrNull()
-                failStreak++
-                Log.e(TAG, "实时翻译失败（连续 $failStreak 次）", e)
+                Log.e(TAG, "实时翻译失败", e)
                 overlay?.showMessage("❌ 翻译失败", e?.message?.take(60) ?: "未知错误")
-                // 连续失败时退避：同一张图反复送上去只会反复失败并继续计费
-                if (failStreak >= 3) {
-                    overlay?.setStatus("连续失败，已暂停重试")
-                    delay(FAIL_BACKOFF_MS)
-                }
+                return Attempt.FAILED
             }
         } finally {
             translating = false
@@ -820,7 +913,13 @@ class LiveTranslateService : Service() {
      * 自检后会**暂停**主循环，否则下一轮翻译会把结果覆盖掉。
      */
     private fun runOcrSelfTest() {
+        paused = true
+        session.invalidate()
+        notifyState()
+        val epoch = session.generation
         scope.launch {
+            while (translating) delay(50)
+            if (!running || !paused || epoch != session.generation) return@launch
             val roi = Roi.parse(App.prefs.liveRoi)
             if (roi == null) {
                 notice("尚未框选翻译区域", "请先框选，再自检")
@@ -834,6 +933,10 @@ class LiveTranslateService : Service() {
             if (needHide) {
                 overlay?.setCaptureHidden(true, windowManager)
                 delay(hideWaitMs)
+            }
+            if (!running || !paused || epoch != session.generation) {
+                if (needHide) overlay?.setCaptureHidden(false, windowManager)
+                return@launch
             }
             val bmp = g.grabRoi(roi)
             if (needHide) overlay?.setCaptureHidden(false, windowManager)
@@ -849,6 +952,8 @@ class LiveTranslateService : Service() {
             } finally {
                 bmp.recycle()
             }
+
+            if (!running || !paused || epoch != session.generation) return@launch
 
             // 自检结果要留得住：暂停主循环，否则下一轮翻译立刻覆盖
             paused = true
@@ -962,7 +1067,8 @@ class LiveTranslateService : Service() {
 
         val state = when {
             paused -> "已暂停"
-            regionSelect != null -> "框选中…"
+            picking || regionSelect != null -> "框选中…"
+            retry.failures > 0 -> "等待重试"
             else -> "运行中"
         }
         return NotificationCompat.Builder(this, channelId)
@@ -982,6 +1088,16 @@ class LiveTranslateService : Service() {
 
     /** 计数 / 暂停状态变化后刷新通知 */
     private fun notifyState() {
+        if (!running || state.value.phase == Phase.STOPPING) return
+        mutableState.value = UiState(
+            when {
+                paused -> Phase.PAUSED
+                picking || regionSelect != null -> Phase.PICKING
+                retry.failures > 0 -> Phase.RETRYING
+                else -> Phase.RUNNING
+            },
+            requestCount
+        )
         runCatching {
             (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
                 .notify(NOTIF_ID, buildNotification())
@@ -990,6 +1106,8 @@ class LiveTranslateService : Service() {
 
     override fun onDestroy() {
         running = false
+        session.invalidate()
+        mutableState.value = UiState(Phase.STOPPING, requestCount)
         loopJob?.cancel()
         endRegionSelect()
         grabber?.stop()
@@ -1002,11 +1120,15 @@ class LiveTranslateService : Service() {
         overlay = null
         scope.cancel()
         instance = null
+        mutableState.value = UiState(Phase.STOPPED)
         Log.i(TAG, "实时翻译已停止（本次共 $requestCount 次请求）")
         super.onDestroy()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
+    enum class Phase { STOPPED, STARTING, RUNNING, PAUSED, PICKING, RETRYING, STOPPING }
+    data class UiState(val phase: Phase, val requests: Int = 0)
 
     companion object {
         private const val TAG = "ScreenTranslator"
@@ -1052,9 +1174,6 @@ class LiveTranslateService : Service() {
          */
         private const val VERIFY_VISIBLE_MS = 160L
 
-        /** 连续失败后的退避时长 */
-        private const val FAIL_BACKOFF_MS = 3000L
-
         /**
          * 游戏画面专用的提示词补充（v1.15.0）。
          *
@@ -1089,6 +1208,7 @@ class LiveTranslateService : Service() {
         const val ACTION_STOP = "com.hunter.screentranslator.LIVE_STOP"
         const val ACTION_PAUSE = "com.hunter.screentranslator.LIVE_PAUSE"
         const val ACTION_RESUME = "com.hunter.screentranslator.LIVE_RESUME"
+        const val ACTION_RETRY = "com.hunter.screentranslator.LIVE_RETRY"
         const val ACTION_PICK_ROI = "com.hunter.screentranslator.LIVE_PICK_ROI"
         const val ACTION_REPOSITION = "com.hunter.screentranslator.LIVE_REPOSITION"
         const val ACTION_DRAG = "com.hunter.screentranslator.LIVE_DRAG"
@@ -1112,16 +1232,38 @@ class LiveTranslateService : Service() {
         var instance: LiveTranslateService? = null
             private set
 
-        fun isRunning(): Boolean = instance != null
+        private val mutableState = MutableStateFlow(UiState(Phase.STOPPED))
+        val state = mutableState.asStateFlow()
+
+        fun isRunning(): Boolean = instance?.running == true
+
+        fun startCapture(ctx: Context, resultCode: Int, data: Intent) {
+            if (state.value.phase != Phase.STOPPED) return
+            mutableState.value = UiState(Phase.STARTING)
+            try {
+                ctx.startForegroundService(Intent(ctx, LiveTranslateService::class.java).apply {
+                    putExtra(EXTRA_RESULT_CODE, resultCode)
+                    putExtra(EXTRA_RESULT_DATA, data)
+                })
+            } catch (e: RuntimeException) {
+                mutableState.value = UiState(Phase.STOPPED)
+                throw e
+            }
+        }
+
+        fun stop(ctx: Context) {
+            mutableState.value = UiState(Phase.STOPPING, state.value.requests)
+            instance?.session?.invalidate()
+            if (!ctx.stopService(Intent(ctx, LiveTranslateService::class.java))) {
+                mutableState.value = UiState(Phase.STOPPED)
+            }
+        }
 
         /** 发送一个动作给正在运行的服务（用于控制页的暂停/框选按钮） */
         fun sendAction(ctx: Context, action: String) {
+            if (!isRunning() || state.value.phase == Phase.STOPPING) return
             val intent = Intent(ctx, LiveTranslateService::class.java).setAction(action)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                ctx.startForegroundService(intent)
-            } else {
-                ctx.startService(intent)
-            }
+            ctx.startService(intent)
         }
     }
 }

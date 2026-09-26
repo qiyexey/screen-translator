@@ -9,6 +9,7 @@ import com.google.mlkit.vision.text.chinese.ChineseTextRecognizerOptions
 import com.google.mlkit.vision.text.japanese.JapaneseTextRecognizerOptions
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 /**
  * v1.11.0 端侧 OCR（拍照翻译用）。
@@ -49,11 +50,12 @@ object OcrEngine {
     }
 
     /** 用日文模型识别整张位图（识别失败返回空列表，由调用方决定怎么告知用户） */
-    suspend fun recognizeJapanese(bitmap: Bitmap): List<Line> =
+    suspend fun recognizeJapanese(bitmap: Bitmap, throwOnFailure: Boolean = false): List<Line> =
         suspendCancellableCoroutine { cont ->
             val image = runCatching { InputImage.fromBitmap(bitmap, 0) }.getOrNull()
             if (image == null) {
-                cont.resume(emptyList())
+                if (throwOnFailure) cont.resumeWithException(IllegalArgumentException("无法读取 OCR 图片"))
+                else cont.resume(emptyList())
                 return@suspendCancellableCoroutine
             }
             japaneseRecognizer.process(image)
@@ -70,7 +72,10 @@ object OcrEngine {
                 }
                 .addOnFailureListener { e ->
                     Log.w(TAG, "日文 OCR 失败: $e")
-                    if (cont.isActive) cont.resume(emptyList())
+                    if (cont.isActive) {
+                        if (throwOnFailure) cont.resumeWithException(e)
+                        else cont.resume(emptyList())
+                    }
                 }
         }
 

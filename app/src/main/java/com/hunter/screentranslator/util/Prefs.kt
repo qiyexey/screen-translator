@@ -4,6 +4,9 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.util.Log
 import com.hunter.screentranslator.api.SOURCE_AUTO
+import com.hunter.screentranslator.api.EngineReadiness
+import com.hunter.screentranslator.api.TranslationEngine
+import com.hunter.screentranslator.api.engineReadiness
 
 /**
  * 偏好设置封装。
@@ -83,6 +86,31 @@ class Prefs(context: Context) {
      */
     fun raw(key: String): String =
         if (key in SENSITIVE_KEYS) getSecret(key) else sp.getString(key, "") ?: ""
+
+    fun readiness(engine: TranslationEngine = TranslationEngine.fromKey(this.engine)): EngineReadiness =
+        engineReadiness(
+            engine,
+            localModelReady = engine == TranslationEngine.HYMT_LOCAL &&
+                HyMtModelStore.status(HyMtQuant.fromId(hymtQuant)) is HyMtModelStatus.Ready,
+            valueOf = ::raw
+        )
+
+    /** Compare stored credentials without decrypting them on every captured frame. Never log this snapshot. */
+    fun translationConfiguration(): Map<String, Any?> {
+        val keys = (SENSITIVE_KEYS - KEY_ASR_API_KEY) + setOf(
+            KEY_ENGINE, KEY_BASE_URL, KEY_MODEL, KEY_OPENAI_BASE_URL, KEY_OPENAI_MODEL,
+            KEY_CLAUDE_MODEL, KEY_QWEN_MODEL, KEY_GLM_MODEL, KEY_DOUBAO_MODEL,
+            KEY_MS_REGION, KEY_SOURCE_LANG, KEY_TARGET_LANG, KEY_HYMT_QUANT,
+            KEY_HYMT_CONTEXT, KEY_HYMT_THREADS, KEY_LIVE_ROI
+        )
+        val normal = sp.all
+        val secret = spSecret.all
+        return keys.associateWith { secret[it] ?: normal[it] } +
+            if (engine == "hymt-local") {
+                val file = HyMtModelStore.fileFor(HyMtQuant.fromId(hymtQuant))
+                mapOf("local_model_size" to file.length(), "local_model_modified" to file.lastModified())
+            } else emptyMap()
+    }
 
     /**
      * 把 v1.17.0 及以前留在旧文件里的明文密钥迁到加密文件（v1.18.0）。
@@ -324,7 +352,7 @@ class Prefs(context: Context) {
         get() = sp.getFloat(KEY_PANEL_ALPHA, 1f)
         set(value) = sp.edit().putFloat(KEY_PANEL_ALPHA, value.coerceIn(0.4f, 1f)).apply()
 
-    /** 语音识别（ASR）：OpenAI 兼容 /v1/audio/transcriptions，v1.6.0 听视频翻译用 */
+    /** Whisper 语音识别：OpenAI 兼容 /v1/audio/transcriptions，语音翻译使用。 */
     var asrApiKey: String
         get() = getSecret(KEY_ASR_API_KEY)
         set(value) = putSecret(KEY_ASR_API_KEY, value)
@@ -338,7 +366,8 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putString(KEY_ASR_MODEL, value).apply()
 
     /**
-     * 语音输入引擎：system（系统 SpeechRecognizer）/ whisper（自建采集+Whisper，v1.7.0）
+     * 语音输入方式：system（系统连续听写）/ whisper（自建采集+Whisper）/
+     * ime（当前输入法听写，由用户在键盘内选择麦克风）。
      *
      * v1.27.0：空串表示"用户还没选过"，由界面按**本机实际能力**推断
      * （系统听写可用 → system，不可用 → whisper），而不是无脑默认 system。

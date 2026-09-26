@@ -15,7 +15,6 @@ import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -26,7 +25,10 @@ import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+import androidx.core.widget.addTextChangedListener
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.button.MaterialButton
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.R
 import com.hunter.screentranslator.api.TranslationEngine
@@ -99,11 +101,11 @@ class ImageTranslateActivity : AppCompatActivity() {
     private lateinit var tvResult: TextView
     private lateinit var tvSource: TextView
     private lateinit var progress: ProgressBar
-    private lateinit var btnSpeak: Button
-    private lateinit var btnFull: Button
-    private lateinit var btnPickGallery: Button
-    private lateinit var btnCapture: Button
-    private lateinit var btnMode: Button
+    private lateinit var btnSpeak: MaterialButton
+    private lateinit var btnFull: MaterialButton
+    private lateinit var btnPickGallery: MaterialButton
+    private lateinit var btnCapture: MaterialButton
+    private lateinit var btnMode: MaterialButton
     private lateinit var resultBox: LinearLayout
 
     private var screenshot: Bitmap? = null
@@ -230,12 +232,16 @@ class ImageTranslateActivity : AppCompatActivity() {
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(themeColor(com.google.android.material.R.attr.colorSurface))
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            setPadding(dp(16), dp(12), dp(16), dp(16))
         }
 
         // ---- 模式切换（v1.25.0）----
-        btnMode = Button(this).apply {
+        btnMode = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
             textSize = 13f
+            minHeight = dp(48)
+            icon = ContextCompat.getDrawable(this@ImageTranslateActivity, R.drawable.ic_translate)
+            iconSize = dp(18)
+            iconPadding = dp(8)
             setOnClickListener { toggleMode() }
             layoutParams = LinearLayout.LayoutParams(-1, -2)
         }
@@ -245,7 +251,8 @@ class ImageTranslateActivity : AppCompatActivity() {
             text = getString(R.string.image_translate_t13)
             setTextColor(themeColor(com.google.android.material.R.attr.colorOnSurfaceVariant))
             textSize = 13f
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(6) }
+            setLineSpacing(dp(2).toFloat(), 1f)
+            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }
         }
         root.addView(tvStatus)
 
@@ -285,7 +292,10 @@ class ImageTranslateActivity : AppCompatActivity() {
 
         // 结果区（框选模式 / 「📄 全文」整段翻译用）
         val resultScroll = ScrollView(this).apply {
-            layoutParams = LinearLayout.LayoutParams(-1, 0, 1f)
+            layoutParams = LinearLayout.LayoutParams(-1, 0, 0.4f).apply { topMargin = dp(12) }
+            background = ContextCompat.getDrawable(this@ImageTranslateActivity, R.drawable.bg_translation_panel)
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            visibility = View.GONE
         }
         resultBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         tvSource = TextView(this).apply {
@@ -295,8 +305,10 @@ class ImageTranslateActivity : AppCompatActivity() {
         }
         tvResult = TextView(this).apply {
             setTextColor(themeColor(com.google.android.material.R.attr.colorOnSurface))
-            textSize = 15f
+            textSize = 16f
+            setLineSpacing(dp(3).toFloat(), 1f)
         }
+        tvResult.addTextChangedListener { resultScroll.visibility = if (it.isNullOrBlank()) View.GONE else View.VISIBLE }
         resultBox.addView(tvSource)
         resultBox.addView(tvResult)
         resultScroll.addView(resultBox)
@@ -310,8 +322,12 @@ class ImageTranslateActivity : AppCompatActivity() {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }
         }
-        btnPickGallery = Button(this).apply {
+        btnPickGallery = MaterialButton(this).apply {
             text = getString(R.string.image_translate_btn_gallery)
+            minHeight = dp(48)
+            icon = ContextCompat.getDrawable(this@ImageTranslateActivity, R.drawable.ic_image)
+            iconSize = dp(18)
+            iconPadding = dp(6)
             setOnClickListener {
                 // 不传类型参数 = 只让用户选图片（不含视频），
                 // 且优先用系统照片选择器（不需要任何权限）。
@@ -320,24 +336,36 @@ class ImageTranslateActivity : AppCompatActivity() {
                 )
             }
         }
-        btnCapture = Button(this).apply {
+        btnCapture = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
             text = getString(R.string.image_translate_btn_capture)
+            minHeight = dp(48)
+            icon = ContextCompat.getDrawable(this@ImageTranslateActivity, R.drawable.ic_camera)
+            iconSize = dp(18)
+            iconPadding = dp(6)
             setOnClickListener { requestCapture() }
         }
         srcRow.addView(btnPickGallery, LinearLayout.LayoutParams(0, -2, 1f))
-        srcRow.addView(btnCapture, LinearLayout.LayoutParams(0, -2, 1f))
+        srcRow.addView(btnCapture, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
         root.addView(srcRow)
 
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }
         }
-        btnFull = Button(this).apply {
+        btnFull = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
             text = getString(R.string.image_translate_btn_full)
+            minHeight = dp(48)
+            icon = ContextCompat.getDrawable(this@ImageTranslateActivity, R.drawable.ic_translate)
+            iconSize = dp(18)
+            iconPadding = dp(6)
             setOnClickListener { onFullClick() }
         }
-        btnSpeak = Button(this).apply {
-            text = "🔊 朗读"
+        btnSpeak = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = getString(R.string.image_translate_btn_speak)
+            minHeight = dp(48)
+            icon = ContextCompat.getDrawable(this@ImageTranslateActivity, R.drawable.ic_volume)
+            iconSize = dp(18)
+            iconPadding = dp(6)
             isEnabled = false
             setOnClickListener {
                 // v1.9.3：跟随「朗读内容」设置。图片翻译拿不到原文文字
@@ -351,7 +379,7 @@ class ImageTranslateActivity : AppCompatActivity() {
             }
         }
         row.addView(btnFull, LinearLayout.LayoutParams(0, -2, 1f))
-        row.addView(btnSpeak, LinearLayout.LayoutParams(0, -2, 1f))
+        row.addView(btnSpeak, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
         root.addView(row)
 
         return root

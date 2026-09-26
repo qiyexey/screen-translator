@@ -99,15 +99,12 @@ class MainActivity : BaseActivity() {
         setContentView(b.root)
         EdgeToEdge.install(this)
 
-        // ---- 六个功能入口 ----
+        // ---- 主要功能入口 ----
         b.btnInputTranslate.setOnClickListener {
             startActivity(Intent(this, TranslateInputActivity::class.java))
         }
         b.btnVoiceTranslate.setOnClickListener {
             startActivity(Intent(this, VoiceTranslateActivity::class.java))
-        }
-        b.btnVideoListen.setOnClickListener {
-            startActivity(Intent(this, VideoListenActivity::class.java))
         }
         b.btnImageTranslate.setOnClickListener {
             startActivity(Intent(this, ImageTranslateActivity::class.java))

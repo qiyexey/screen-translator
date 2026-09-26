@@ -70,9 +70,12 @@
             android:id="@+id/btnEngineQuick"
             style="@style/Widget.ScreenTranslator.Button.Outlined"
             android:layout_width="match_parent"
-            android:layout_height="48dp"
+            android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
+            android:ellipsize="end"
             android:gravity="center_vertical|start"
+            android:maxLines="2"
+            android:minHeight="48dp"
             android:text="@string/main_engine_label"
             android:textAllCaps="false"
             android:textColor="?attr/colorOnSurface"
@@ -125,9 +128,9 @@
                     android:layout_width="48dp"
                     android:layout_height="48dp"
                     android:contentDescription="@string/main_swap_language_content_description"
-                    android:text="⇄"
-                    android:textColor="?attr/colorOnSurfaceVariant"
-                    android:textSize="20sp" />
+                    android:text=""
+                    app:icon="@drawable/ic_swap_horiz"
+                    app:iconSize="24dp" />
 
                 <com.google.android.material.textfield.TextInputLayout
                     style="@style/Widget.ScreenTranslator.DropdownLayout.Borderless"
@@ -189,6 +192,12 @@
                     app:iconGravity="textStart"
                     app:iconPadding="10dp"
                     app:iconSize="22dp" />
+
+                <com.google.android.material.divider.MaterialDivider
+                    style="@style/Widget.ScreenTranslator.Divider"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginHorizontal="8dp" />
 
                 <LinearLayout
                     android:layout_width="match_parent"
@@ -295,69 +304,12 @@
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>
 
-        <!-- 场景入口：整卡可点，弱于主功能但比旧版 11sp 小按钮更清楚 -->
-        <com.google.android.material.card.MaterialCardView
-            android:id="@+id/btnVideoListen"
-            style="@style/Widget.ScreenTranslator.Card"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:foreground="?attr/selectableItemBackground"
-            app:cardBackgroundColor="?attr/colorSurfaceContainerLow">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="72dp"
-                android:gravity="center_vertical"
-                android:orientation="horizontal"
-                android:paddingHorizontal="16dp">
-
-                <ImageView
-                    android:layout_width="42dp"
-                    android:layout_height="42dp"
-                    android:background="@drawable/bg_icon_container"
-                    android:contentDescription="@null"
-                    android:padding="9dp"
-                    android:src="@drawable/ic_headphones" />
-
-                <LinearLayout
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_marginStart="14dp"
-                    android:layout_weight="1"
-                    android:orientation="vertical">
-
-                    <TextView
-                        style="@style/TextAppearance.ScreenTranslator.Subtitle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="@string/main_video_title"
-                        android:textStyle="bold" />
-
-                    <TextView
-                        style="@style/TextAppearance.ScreenTranslator.Caption"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginTop="2dp"
-                        android:text="@string/main_video_desc" />
-                </LinearLayout>
-
-                <ImageView
-                    android:layout_width="24dp"
-                    android:layout_height="24dp"
-                    android:contentDescription="@null"
-                    android:src="@drawable/ic_chevron_right" />
-            </LinearLayout>
-        </com.google.android.material.card.MaterialCardView>
-
         <!-- 权限以“运行状态”呈现；用户只有异常时才需要进入完整权限页。 -->
         <com.google.android.material.card.MaterialCardView
             style="@style/Widget.ScreenTranslator.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="18dp"
             app:cardBackgroundColor="?attr/colorSurfaceContainerLowest"
             app:strokeColor="?attr/colorOutlineVariant"
             app:strokeWidth="1dp">
@@ -401,38 +353,54 @@
                 <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:layout_marginTop="6dp"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
+                    android:layout_marginTop="4dp"
+                    android:orientation="vertical">
 
-                    <TextView
-                        style="@style/TextAppearance.ScreenTranslator.Caption"
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="@string/main_accessibility_label" />
+                        android:gravity="center_vertical"
+                        android:minHeight="28dp"
+                        android:orientation="horizontal">
 
-                    <TextView
-                        android:id="@+id/tvMainAccessStatus"
-                        style="@style/TextAppearance.ScreenTranslator.Caption"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"
-                        android:text="@string/common_tv_engine_status" />
+                        <TextView
+                            style="@style/TextAppearance.ScreenTranslator.Caption"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/main_accessibility_label" />
 
-                    <TextView
-                        style="@style/TextAppearance.ScreenTranslator.Caption"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="18dp"
-                        android:text="@string/main_overlay_label" />
+                        <TextView
+                            android:id="@+id/tvMainAccessStatus"
+                            style="@style/TextAppearance.ScreenTranslator.Caption"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="@string/common_tv_engine_status" />
+                    </LinearLayout>
 
-                    <TextView
-                        android:id="@+id/tvMainOverlayStatus"
-                        style="@style/TextAppearance.ScreenTranslator.Caption"
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginStart="6dp"
-                        android:text="@string/common_tv_engine_status" />
+                        android:gravity="center_vertical"
+                        android:minHeight="28dp"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            style="@style/TextAppearance.ScreenTranslator.Caption"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/main_overlay_label" />
+
+                        <TextView
+                            android:id="@+id/tvMainOverlayStatus"
+                            style="@style/TextAppearance.ScreenTranslator.Caption"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="8dp"
+                            android:text="@string/common_tv_engine_status" />
+                    </LinearLayout>
                 </LinearLayout>
             </LinearLayout>
         </com.google.android.material.card.MaterialCardView>

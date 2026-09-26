@@ -72,8 +72,7 @@ Key 为空时 App 完全不发送 `Authorization` 头，所以自建的
 | ⚽ **悬浮球定点** | 拖绿球到文字上松手，即翻译该处 | 松手取球心坐标，反查包含该坐标的最小面积文字节点 |
 | 🔲 **框选翻译**（v1.5.0） | **双击悬浮球**，拖出矩形框，松手翻译框内全部文字 | 全屏遮罩拖画矩形，收集中心点落在选区内的文字节点，按阅读顺序拼接 |
 | ⌨️ **输入翻译**（v1.6.0） | 打字停顿 0.6 秒即自动翻译 | 输入框防抖 + 复用全部翻译引擎；悬浮球**长按**也能进入 |
-| 🎤 **语音翻译**（v1.6.0/1.7.0） | 对着手机说话，连续听写即时翻译 | 双引擎可切换：系统 `SpeechRecognizer` 或 **Whisper**（自建采集，不依赖 GMS，v1.7.0） |
-| 🎧 **听视频翻译**（v1.6.0） | 看视频时屏幕顶部出实时字幕 | 内录（Android 10+）/麦克风采集 → 静音切句 → Whisper 转写 → 翻译 → 悬浮字幕条 |
+| 🎤 **语音翻译**（v1.6.0/1.7.0） | 对着手机说话，连续听写即时翻译 | 可切换系统 `SpeechRecognizer`、**Whisper** 或输入法听写 |
 | 📋 **复制即翻译** | 开关开启后，复制文字立即翻译 | 剪贴板监听（默认关） |
 | 📷 **拍照翻译**（v1.11.0 / v1.14.0 盖住原文） | **点屏幕上的一行字就译那一处**，或按快门把整屏译文盖在各自原文上；**按住屏幕可看原文** | CameraX 取景 → **ML Kit 端侧 OCR**（本机识别、不依赖 GMS）→ 逐行翻译 → 按 OCR 框位置就地覆盖渲染译文；要上下文时另有「📄 全文」走整段一次翻译 |
 | 🖼 **图片翻译**（v1.8.0） | 点主界面入口或**三击悬浮球**，截屏后拖框选区域 | `MediaProjection` 截屏 → 多模态模型直接识别并翻译 |
@@ -137,9 +136,9 @@ Key 为空时 App 完全不发送 `Authorization` 头，所以自建的
 - **自带基准与诊断**：设置页可「跑一次基准（5 句）」并「复制诊断信息」
   （设备指令集 / 线程与上下文 / 进程内存 / 上次延迟），方便反馈问题。
 
-**语音识别（听视频翻译）**：走 OpenAI 兼容的 `/v1/audio/transcriptions` 接口（Whisper 系模型），在 设置 → 语音识别 里配置。支持 OpenAI 官方、自建中转、硅基流动（国内直连）等。注意 DeepSeek 没有 ASR 接口。
+**Whisper 语音识别**：语音翻译页选 Whisper 时，走 OpenAI 兼容的 `/v1/audio/transcriptions` 接口，在 设置 → Whisper 语音识别 里配置。支持 OpenAI 官方、自建中转等。注意 DeepSeek 没有 ASR 接口。
 
-**语音输入翻译**双引擎（v1.7.0）：默认用系统自带语音识别（GMS 或厂商引擎，零配置）；系统不可用时一键切换 **Whisper 引擎**——自建麦克风采集 + 静音切句 + Whisper API 转写，不依赖任何系统服务，无 GMS 的国产 ROM 也能用。
+**语音输入翻译**可选三种输入方式：手机系统识别、Whisper（自建麦克风采集 + 静音切句 + API 转写）和输入法听写。输入法模式可使用已安装的微信输入法，需手动点键盘麦克风。
 
 
 ## 翻译缓存（v1.10.0）
@@ -159,7 +158,7 @@ Key 为空时 App 完全不发送 `Authorization` 头，所以自建的
 - **文件**：`filesDir/translate_cache.json`，先写临时文件再原子替换；写入有 1.5s 合并窗口，
   避免整屏模式每秒重写整个文件。
 
-缓存的挂载点是 `TranslatorFactory.current()` —— 7 个翻译调用点（无障碍读屏 / 听视频 /
+缓存的挂载点是 `TranslatorFactory.current()` —— 各翻译调用点（无障碍读屏 /
 图片翻译 / 输入翻译 / 语音翻译 / 菜单划词 / 主界面测试按钮）全都从这里取引擎，因此在工厂
 外包一层 `CachingTranslator` 就一次性覆盖了所有入口，调用点零改动。
 
@@ -199,7 +198,7 @@ Key 为空时 App 完全不发送 `Authorization` 头，所以自建的
 ├─ 🌐 翻译引擎 · 语言 · 密钥
 ├─ ⚡ 翻译触发方式      悬浮球 / 划词 / 全屏 / 复制 / 结果面板
 ├─ 🔊 朗读译文（TTS）
-├─ 🎧 语音识别（听视频用）
+├─ 🎤 Whisper 语音识别（语音翻译用）
 ├─ ⚽ 悬浮球与面板外观
 ├─ 🔋 权限与保活
 └─ ℹ️ 关于与用法
@@ -237,9 +236,9 @@ screen-translator/
         │   │   ├── TranslatorFactory.kt     # 引擎工厂
         │   │   ├── DeepSeekTranslator.kt    # DeepSeek 实现
         │   │   └── WhisperClient.kt         # 语音识别（OpenAI 兼容 /v1/audio/transcriptions）
-        │   ├── overlay/                    # 悬浮球 / 结果面板 / 框选 / 字幕条
-        │   ├── service/                    # 4 个前台服务（无障碍 / 悬浮窗 / 听视频 / 实时翻译）
-        │   ├── ui/                         # 18 个 Activity
+        │   ├── overlay/                    # 悬浮球 / 结果面板 / 框选
+        │   ├── service/                    # 无障碍 / 悬浮窗 / 实时翻译服务及音频分段器
+        │   ├── ui/                         # 功能与设置页面
         │   └── util/
         │       ├── Prefs.kt                 # 偏好设置封装
         │       ├── SecretStore.kt           # API Key 的 AndroidKeyStore 加密存储（v1.18.0）
@@ -287,12 +286,11 @@ screen-translator/
 | 权限 | 用途 |
 |------|------|
 | `INTERNET` | 调用翻译 / 语音识别 API |
-| `SYSTEM_ALERT_WINDOW` | 显示翻译悬浮窗与字幕条 |
+| `SYSTEM_ALERT_WINDOW` | 显示翻译悬浮窗 |
 | `BIND_ACCESSIBILITY_SERVICE` | 读取屏幕文字 |
 | `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_SPECIAL_USE` | 保活悬浮窗服务 |
-| `RECORD_AUDIO` | 语音输入 / 听视频麦克风模式 |
-| `FOREGROUND_SERVICE_MEDIA_PROJECTION` | 听视频内录模式（Android 10+） |
-| `FOREGROUND_SERVICE_MICROPHONE` | 听视频麦克风模式（Android 11+） |
+| `RECORD_AUDIO` | 语音翻译的系统听写和 Whisper 收音 |
+| `FOREGROUND_SERVICE_MEDIA_PROJECTION` | 实时屏幕翻译的画面采集 |
 | `POST_NOTIFICATIONS` | Android 13+ 前台服务通知 |
 
 ## 故障排查（重要）

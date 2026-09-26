@@ -1,4 +1,5 @@
 <resources>
+    <string name="live_translate_retry">立即重试</string>
     <string name="app_name">屏幕翻译</string>
     <string name="accessibility_service_label">屏幕翻译</string>
     <string name="accessibility_service_desc">读取屏幕上显示的文字内容，并发送给AI翻译引擎进行实时翻译。支持划词翻译与悬浮球定点翻译。仅在用户启用时工作。</string>
@@ -69,16 +70,13 @@
     <string name="common_tv_result">译文会显示在这里…</string>
 
     <!-- activity_asr_settings.xml -->
-    <string name="common_t08">语音识别（听视频用）</string>
+    <string name="common_t08">Whisper 语音识别</string>
 
     <!-- activity_ball_style.xml -->
     <string name="common_t09">透明度</string>
 
     <!-- activity_live_translate.xml -->
     <string name="live_translate_t01">1. 先配好一个支持视觉的引擎（DeepSeek / OpenAI / Claude / 通义 / GLM / 豆包）；普通翻译引擎只有文字通道，送不了图。\n\n2. 点「开始实时翻译」→ 系统弹一次屏幕捕获授权（Android 14+ 每次会话都会弹，平台规定，绕不过）。\n\n3. 切到游戏/模拟器，从通知栏点「🔲 框选区域」，在游戏文字框上拖一个框。\n\n4. 之后画面里的文字一变就会被翻译，译文直接压在原文位置上。\n\n5. 从通知栏可暂停 / 停止；「已翻译 N 次」就是当前消耗的请求数。</string>
-
-    <!-- activity_video_listen.xml -->
-    <string name="video_listen_t01">1. 开始后切到要听的视频 App，屏幕顶部会出现字幕条\n\n2. 字幕条可拖动到不挡画面的位置，点 ✕ 结束\n\n3. 每句话停顿约 0.7 秒后出转写和翻译（同传级延迟）\n\n4. 依赖「语音识别 API」（主界面 → 语音识别设置），需 OpenAI 兼容的 Whisper 接口</string>
 
     <!-- activity_asr_settings.xml -->
     <string name="asr_settings_t01">API Key（OpenAI 兼容 / Whisper，自建服务可留空）</string>
@@ -122,10 +120,6 @@
     <!-- activity_engine_settings.xml -->
     <string name="engine_settings_btn_hy_mt_import">从文件导入 gguf（自备模型）</string>
 
-    <!-- activity_video_listen.xml -->
-    <string name="video_listen_t02">使用说明</string>
-    <string name="video_listen_btn_stop">停止</string>
-
     <!-- activity_trigger_settings.xml -->
     <string name="trigger_settings_t01">全屏自动翻译</string>
 
@@ -156,13 +150,10 @@
     <string name="ball_style_t02">只调背景不调文字，调低后译文依然清晰</string>
 
     <!-- activity_voice_translate.xml -->
-    <string name="voice_translate_t01">听到的原文</string>
-
-    <!-- activity_main.xml -->
-    <string name="main_btn_video_listen">听视频</string>
+    <string name="voice_translate_t01">原文</string>
 
     <!-- activity_asr_settings.xml -->
-    <string name="asr_settings_t02">听视频翻译的转写引擎，走 OpenAI 兼容的 /v1/audio/transcriptions 接口。支持 OpenAI 官方、中转站、硅基流动（国内直连）等。注意 DeepSeek 没有语音识别接口。\n\n自建服务（本地 faster-whisper-server、whisper.cpp server 等）通常不校验密钥，此时 API Key 可以留空，只要把「接口地址」指向你的服务即可，例如 http://127.0.0.1:8000/v1 或 http://192.168.1.5:8000/v1。</string>
+    <string name="asr_settings_t02">语音翻译页选择 Whisper 时使用这里的识别接口，走 OpenAI 兼容的 /v1/audio/transcriptions。支持 OpenAI 官方、中转站及自建服务；DeepSeek 不提供语音识别接口。\n\n自建服务（如 faster-whisper-server、whisper.cpp server）若无需鉴权，API Key 可留空，只需填写其接口地址，例如 http://127.0.0.1:8000/v1。</string>
 
     <!-- activity_settings.xml -->
     <string name="settings_t02">四种用法说明与常见问题</string>
@@ -216,14 +207,12 @@
     <!-- activity_permission.xml -->
     <string name="permission_btn_enable_accessibility">开启</string>
 
-    <!-- activity_video_listen.xml -->
-    <string name="video_listen_btn_start">开始听视频翻译</string>
-
     <!-- activity_live_translate.xml -->
     <string name="live_translate_btn_start">开始实时翻译</string>
 
     <!-- activity_voice_translate.xml -->
     <string name="voice_translate_btn_toggle">开始聆听</string>
+    <string name="voice_translate_btn_stop">停止</string>
 
     <!-- activity_translate_input.xml -->
     <string name="translate_input_tv_engine_info">引擎 · 目标语言</string>
@@ -348,9 +337,6 @@
     <!-- activity_tts_settings.xml -->
     <string name="tts_settings_t04">用系统语音引擎朗读。翻译结果面板上也会出现「🔊」按钮，长按它可快速切换朗读内容。</string>
 
-    <!-- activity_video_listen.xml -->
-    <string name="video_listen_t03">用麦克风收音，适合手机外放视频的场景。环境要安静、音量开大些；无 GMS 设备也能用（不依赖系统语音服务）</string>
-
     <!-- activity_live_translate.xml -->
     <string name="live_translate_t10">画面变化阈值（默认 1；换对白时实测 Δ 约 2~5，噪声为 0）</string>
 
@@ -367,9 +353,6 @@
     <string name="engine_settings_t50">自动识别（推荐）</string>
     <string name="engine_settings_t51">让模型自己判断原文语言。中日混排、纯短句偶尔会判错，判错时可以在这里手动指定。</string>
     <string name="engine_settings_t33">目标语言（源语言自动识别）</string>
-
-    <!-- activity_video_listen.xml -->
-    <string name="video_listen_t04">直接采集系统正在播放的声音（视频/播客/直播），不受环境噪音影响，戴耳机也能用。需授权一次屏幕录制。部分 DRM 应用（如 Netflix）不允许内录</string>
 
     <!-- activity_ball_style.xml -->
     <string name="ball_style_t05">结果面板透明度</string>
@@ -399,6 +382,13 @@
     -->
     <!-- v1.22.0 语音页故障提示条上的「处理」按钮 -->
     <string name="voice_translate_btn_fix">处理</string>
+    <string name="voice_translate_ime_open">打开输入法</string>
+    <string name="voice_translate_ime_hint">原文</string>
+    <string name="voice_translate_ime_picker">切换输入法</string>
+    <string name="voice_translate_ime_translate">翻译</string>
+    <string name="voice_translate_ime_empty">先输入或听写原文</string>
+    <string name="voice_translate_system_guide">系统听写帮助</string>
+    <string name="voice_translate_system_guide_body">1. 在手机设置的“语言与输入法 / 语音输入”中选择可用的语音识别服务。不同手机的菜单名称可能不同。\n2. 允许本 App 使用麦克风，并在语音页选对识别语言。\n3. 若提示缺少语言包，先安装对应语言包；若提示网络错误，说明当前系统语音服务需要联网，切换输入法听写或其他识别方式不会经过这条服务。\n4. 输入法听写可选微信输入法，但需在系统里启用它，再点键盘上的麦克风。</string>
 
     <string name="engine_settings_bing_web_note">免费、无需密钥，但走的是必应网页自用的非公开接口：只支持文字（图片翻译与实时屏幕翻译不可用），且随时可能因对方改版或限流失效，建议仅作兜底。</string>
 
@@ -446,9 +436,6 @@
     <string name="settings_t08">选引擎、填 Key、设目标语言</string>
     <string name="settings_t09">透明度、大小、颜色</string>
 
-    <!-- activity_video_listen.xml -->
-    <string name="video_listen_t05">采集方式</string>
-
     <!-- activity_about.xml -->
     <string name="about_btn_show_onboarding">重新查看使用引导</string>
 
@@ -475,15 +462,8 @@
     <string name="live_translate_t18">默认关：叠层不吃触摸，免得把游戏的操作区变哑。打开后叠层会拦住那一块的点击。</string>
     <string name="live_translate_t19">默认关：译文贴在选区外侧，不遮挡原文，所以完全不闪。打开后译文会盖在原文上（观感更接近原生汉化），但为了拍到下面的游戏画面，叠层必须周期性隐藏，因此会闪。二选一，按需取舍。</string>
 
-    <!-- activity_video_listen.xml -->
-    <string name="video_listen_t06">🎙️ 麦克风模式（任何设备）</string>
-
     <!-- activity_voice_translate.xml -->
     <string name="voice_translate_t02">🎤 语音翻译</string>
-
-    <!-- activity_video_listen.xml -->
-    <string name="video_listen_t07">🎧 听视频翻译</string>
-    <string name="video_listen_t08">🔊 内录模式（推荐，Android 10+）</string>
 
     <!-- activity_tts_settings.xml -->
     <string name="tts_settings_t08">🔊 朗读</string>
@@ -503,24 +483,20 @@
     <string name="engine_settings_t39">下载完成，正在校验 sha256（1GB 约十几秒）…</string>
     <string name="base_t01">你的 ROM 不支持自动跳转，请到电池设置里手动添加</string>
     <string name="voice_translate_t07">先停止再切换引擎</string>
-    <string name="video_listen_t09">内录模式需要 Android 10 及以上，请用麦克风模式</string>
     <string name="image_translate_t01">图片编码失败</string>
     <string name="image_translate_t02">在图上拖动框选要翻译的区域，松手即翻译。</string>
     <string name="roi_picker_t01">在画面上拖出要翻译的文字区域</string>
-    <string name="video_listen_t10">已停止</string>
     <string name="live_translate_t20">已停止实时翻译</string>
     <string name="engine_settings_t40">已删除</string>
     <string name="engine_settings_t41">已卸载模型，内存已释放</string>
     <string name="history_t01">已复制译文</string>
     <string name="live_translate_t21">已开始 · 请切到游戏，再从通知栏点「框选区域」</string>
-    <string name="video_listen_t11">已开始，切到视频 App 看字幕</string>
     <string name="history_t02">已清空（收藏保留）</string>
     <string name="base_t02">已设置忽略电池优化 ✅</string>
     <string name="permission_t06">悬浮窗已启动</string>
     <string name="image_translate_t03">截图失败。可能是系统限制了截屏，请重试。</string>
     <string name="camera_translate_t01">整段翻译中（一次请求，带上下文）…</string>
     <string name="camera_translate_t02">未授予相机权限。可到 系统设置 → 应用 → 屏幕翻译 → 权限 里开启</string>
-    <string name="video_listen_t12">未授权屏幕录制，无法内录</string>
     <string name="live_translate_t22">未授权屏幕捕获，无法开始</string>
     <string name="image_translate_t04">未获得截图授权。图片翻译需要该权限才能读取屏幕内容。</string>
     <string name="image_translate_t05">本机识别中（不走网络）…</string>
@@ -556,9 +532,10 @@
     <string name="image_translate_t15">这张图片读不出来，可能已被删除或无权访问，换一张试试。</string>
     <!-- v1.25.0 译文原位覆盖：默认把每行译文盖回原文位置，可切回框选 -->
     <string name="image_translate_btn_full">翻译整张图</string>
-    <string name="image_translate_btn_whole">📄 全文</string>
-    <string name="image_translate_mode_overlay">显示方式：译文盖在原文上（点这里切「框选翻译」）</string>
-    <string name="image_translate_mode_region">显示方式：框选区域翻译（点这里切「译文盖在原文上」）</string>
+    <string name="image_translate_btn_whole">全文翻译</string>
+    <string name="image_translate_btn_speak">朗读译文</string>
+    <string name="image_translate_mode_overlay">原位覆盖</string>
+    <string name="image_translate_mode_region">框选翻译</string>
     <string name="image_translate_t16">正在识别文字（本机完成，不联网）…</string>
     <string name="image_translate_t17">没识别到文字。换一张更清晰的图，或切到「框选翻译」手动框一块。</string>
     <string name="image_translate_t18">已就地翻译 %1$d/%2$d 行</string>
@@ -575,7 +552,6 @@
     <string name="image_translate_t29">整段翻译完成，已在下方显示。</string>
     <string name="image_translate_t30">这里没识别到文字，点在文字上试试</string>
     <string name="camera_translate_t10">需要相机权限才能拍照翻译</string>
-    <string name="video_listen_t13">需要麦克风权限</string>
     <string name="voice_translate_t08">需要麦克风权限才能语音识别</string>
 
     <!-- v1.21.0 首页视觉重构：把高频选择前移，不再全塞进设置 -->
@@ -590,8 +566,6 @@
     <string name="main_live_title">实时屏幕翻译</string>
     <string name="main_live_desc">框选屏幕区域，画面出现新文字时自动翻译并贴回原位。</string>
     <string name="main_live_action">开始实时翻译</string>
-    <string name="main_video_title">听视频</string>
-    <string name="main_video_desc">把视频声音转成双语字幕</string>
     <string name="main_permission_title">运行状态</string>
     <string name="main_permission_action">检查权限</string>
     <string name="main_accessibility_label">无障碍服务</string>

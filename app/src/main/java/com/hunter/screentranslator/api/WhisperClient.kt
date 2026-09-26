@@ -39,8 +39,8 @@ class WhisperClient(
     private val model: String,
     /**
      * 共享 client（HttpClients 单例）。
-     * 修复前这里在构造函数里新建 OkHttpClient，而 VideoListenService 每个音频分段
-     * 都新建一个 WhisperClient —— 每个分段泄漏一个连接池 + 一个线程池。
+     * 修复前这里在构造函数里新建 OkHttpClient，而语音翻译每个音频分段
+     * 都新建一个 WhisperClient，造成连接池和线程池反复创建。
      */
     private val client: OkHttpClient = HttpClients.asr
 ) {
