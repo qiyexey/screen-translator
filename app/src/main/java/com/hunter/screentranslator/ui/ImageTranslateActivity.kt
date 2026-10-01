@@ -10,6 +10,7 @@ import android.graphics.Rect
 import android.net.Uri
 import android.media.projection.MediaProjection
 import android.media.projection.MediaProjectionManager
+import android.os.Build
 import android.os.Bundle
 import android.util.Log
 import android.view.Gravity
@@ -142,6 +143,11 @@ class ImageTranslateActivity : AppCompatActivity() {
             if (screenshot == null) tvStatus.text = getString(R.string.image_translate_t13)
             return@registerForActivityResult
         }
+        loadImageUri(uri)
+    }
+
+    /** 相册选图与分享进来的图片共用（v1.29.0 抽出来） */
+    private fun loadImageUri(uri: Uri) {
         tvStatus.text = getString(R.string.image_translate_t14)
         lifecycleScope.launch {
             val bmp = withContext(Dispatchers.IO) {
@@ -163,7 +169,7 @@ class ImageTranslateActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(buildUi())
+        setContentView(withTopAppBar(getString(R.string.activity_image_translate), buildUi()))
         EdgeToEdge.install(this)
 
         mode = App.prefs.imageTranslateMode
@@ -224,6 +230,24 @@ class ImageTranslateActivity : AppCompatActivity() {
         // v1.25.0：不再自动申请截屏授权 —— 用户可能只想从相册选图。
         // 首次进入先把"两条来源"说清楚，由用户点按钮决定。
         tvStatus.text = getString(R.string.image_translate_t13)
+
+        // v1.29.0：从别的 App「分享 → 翻译图片」进来，直接载入那张图
+        sharedImage(intent)?.let { loadImageUri(it) }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        sharedImage(intent)?.let { loadImageUri(it) }
+    }
+
+    private fun sharedImage(intent: Intent?): Uri? {
+        if (intent?.action != Intent.ACTION_SEND) return null
+        return if (Build.VERSION.SDK_INT >= 33) {
+            intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+        } else {
+            @Suppress("DEPRECATION")
+            intent.getParcelableExtra(Intent.EXTRA_STREAM)
+        }
     }
 
     // ==================== UI（代码构建，避免再往 1213 行的 activity_main.xml 里堆）====================
@@ -518,7 +542,7 @@ class ImageTranslateActivity : AppCompatActivity() {
         tvStatus.text = getString(R.string.image_translate_t16)
 
         lifecycleScope.launch {
-            val scanned = withContext(Dispatchers.Default) { OcrEngine.recognize(frame) }
+            val scanned = withContext(Dispatchers.Default) { OcrEngine.recognizeFor(frame, App.prefs.sourceLang, OcrEngine.Script.CHINESE) }
             ovEngine.setLines(scanned)
             progress.visibility = View.GONE
             lineLayer.invalidate()
@@ -671,7 +695,7 @@ class ImageTranslateActivity : AppCompatActivity() {
                 // 识别不花钱、不联网、图片不出设备；只有认出的文字发给引擎。
                 tvStatus.text = getString(R.string.image_translate_t05)
                 val lines = runCatching {
-                    withContext(Dispatchers.IO) { OcrEngine.recognizeJapanese(bmp) }
+                    withContext(Dispatchers.IO) { OcrEngine.recognizeFor(bmp, App.prefs.sourceLang) }
                 }.getOrElse { emptyList() }
                 val src = OcrEngine.toPlainText(lines)
                 if (src.isBlank()) {

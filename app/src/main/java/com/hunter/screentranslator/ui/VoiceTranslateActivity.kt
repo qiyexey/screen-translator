@@ -1341,6 +1341,14 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
     }
 
     private fun reallyStartWhisper() {
+        // 入口 startWithPermission 已经查过，但这里可能隔着一个对话框才被调到，
+        // 期间用户可以去系统设置撤销麦克风权限；就地再查一次，没权限就重新申请。
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+            != PackageManager.PERMISSION_GRANTED
+        ) {
+            ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.RECORD_AUDIO), 1)
+            return
+        }
         val sampleRate = 16000
         val minBuf = AudioRecord.getMinBufferSize(sampleRate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val record = try {
@@ -1355,6 +1363,9 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
                 )
                 .setBufferSizeInBytes(maxOf(minBuf, sampleRate * 2))
                 .build()
+        } catch (e: SecurityException) {
+            toast(getString(R.string.voice_translate_t08))
+            return
         } catch (e: Exception) {
             toast("麦克风初始化失败：${e.message}")
             return
@@ -1365,12 +1376,11 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
         b.btnToggle.text = getString(R.string.voice_translate_btn_stop)
         b.tvStatus.text = getString(R.string.voice_translate_t05)
 
-        // v1.24.0：Whisper 的 langHint 也按用户选的语言下发（ISO-639-3 前缀）：
-        // cmn-Hans-CN → cmn，ja-JP → ja。传空串会让 Whisper 自己做语言检测，
-        // 但它对短句检测很不稳，容易猜错并把整段带偏。
-        val langHint = listenLangs[langIndex].substringBefore('-')
+        // v1.24.0：Whisper 的 langHint 也按用户选的语言下发。传空串会让 Whisper 自己
+        // 做语言检测，但它对短句检测很不稳，容易猜错并把整段带偏。
+        // langHint 每段现算（不在开始时固定），这样听的过程中切语言立刻生效。
         val segmenter = AudioSegmenter(sampleRate) { pcm ->
-            lifecycleScope.launch { processWhisperSegment(pcm, sampleRate, langHint) }
+            lifecycleScope.launch { processWhisperSegment(pcm, sampleRate, whisperLangHint()) }
         }
 
         captureThread = Thread {
@@ -1386,6 +1396,16 @@ class VoiceTranslateActivity : BaseActivity(), RecognitionListener {
             } catch (_: Exception) {
             }
         }.apply { start() }
+    }
+
+    /**
+     * Whisper 的 language 参数要 ISO-639-1 两字母码（zh / en / ja）。
+     * listenLangs 是给系统识别用的 BCP-47 标签，中文写的是 cmn-Hans-CN（SODA 只认这个），
+     * 直接取前缀会得到 cmn —— OpenAI 接口不认，中文 Whisper 识别会整段失败。
+     */
+    private fun whisperLangHint(): String {
+        val prefix = listenLangs[langIndex.coerceIn(0, listenLangs.lastIndex)].substringBefore('-')
+        return if (prefix == "cmn") "zh" else prefix
     }
 
     private suspend fun processWhisperSegment(pcm: ByteArray, sampleRate: Int, langHint: String) {

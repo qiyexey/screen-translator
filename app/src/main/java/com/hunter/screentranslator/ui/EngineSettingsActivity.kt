@@ -11,6 +11,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.lifecycleScope
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.R
+import com.hunter.screentranslator.api.EngineReadiness
+import com.hunter.screentranslator.api.FallbackTranslator
 import com.hunter.screentranslator.api.HyMtDeviceSupport
 import com.hunter.screentranslator.api.HyMtRuntime
 import com.hunter.screentranslator.api.LANG_DISPLAY
@@ -92,7 +94,7 @@ class EngineSettingsActivity : BaseActivity() {
         applyEngineVisibility(currentEngine)
 
         // ---- 源语言（v1.20.0）----
-        // 列表 = "自动识别（推荐）" + LANG_DISPLAY 的 8 种语言，与 TtsSettingsActivity
+        // 列表 = "自动识别（推荐）" + LANG_DISPLAY 的全部语言，与 TtsSettingsActivity
         // 的「原文语言」下拉完全同构（那里也是 auto + 8 语言）。
         // 用 srcCodes 与 srcLabels 两个等长列表分离"存什么"与"显示什么" ——
         // 直接把 label 当值存，将来改文案就会把用户的旧设置读成无效值。
@@ -107,6 +109,16 @@ class EngineSettingsActivity : BaseActivity() {
         b.spinnerTarget.setSimpleItems(langCodes.map { "${LANG_DISPLAY[it]} ($it)" }.toTypedArray())
         setSel(b.spinnerTarget, langCodes.indexOf(App.prefs.targetLang).coerceAtLeast(0))
 
+        // ---- 备用引擎（v1.29.0）----
+        // 第一项「不使用」存空串；其余与主引擎同一张表（选成和主引擎一样时工厂会忽略它）
+        val fbKeys = listOf("") + engines.map { it.key }
+        b.spinnerFallback.setSimpleItems(
+            (listOf(getString(R.string.engine_fallback_none)) + engines.map { it.displayName }).toTypedArray()
+        )
+        setSel(b.spinnerFallback, fbKeys.indexOf(App.prefs.fallbackEngine).coerceAtLeast(0))
+        b.spinnerFallback.setOnItemClickListener { _, _, pos, _ -> refreshFallbackHint(fbKeys[pos]) }
+        refreshFallbackHint(App.prefs.fallbackEngine)
+
         b.tvApiKeyHelp.setOnClickListener {
             startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://platform.deepseek.com")))
         }
@@ -117,13 +129,37 @@ class EngineSettingsActivity : BaseActivity() {
             App.prefs.engine = engines[selPos(b.spinnerEngine)].key
             App.prefs.sourceLang = srcCodes[selPos(b.spinnerSource)]
             App.prefs.targetLang = langCodes[selPos(b.spinnerTarget)]
+            App.prefs.fallbackEngine = fbKeys.getOrElse(selPos(b.spinnerFallback)) { "" }
+            // 换了配置就从主引擎重新开始试，不沿用旧配置的熔断状态
+            FallbackTranslator.reset()
+            refreshFallbackHint(App.prefs.fallbackEngine)
             toast(getString(R.string.common_t10))
         }
 
         b.btnTestTranslate.setOnClickListener { testTranslate() }
 
+        // ---- v1.29.0 术语表 ----
+        b.btnGlossary.setOnClickListener { startActivity(Intent(this, GlossaryActivity::class.java)) }
+
         // ---- v1.17.0 本地大模型区 ----
         setupHyMtUi()
+    }
+
+    /** 备用引擎没配好时如实说一句，否则显示用法说明（v1.29.0） */
+    override fun onResume() {
+        super.onResume()
+        // 从术语表页回来时刷新条数
+        b.btnGlossary.text = getString(R.string.glossary_btn, App.prefs.glossaryEntries().size)
+    }
+
+    private fun refreshFallbackHint(key: String) {
+        val notReady = key.takeIf { it.isNotBlank() }
+            ?.let { App.prefs.readiness(TranslationEngine.fromKey(it)) as? EngineReadiness.NotReady }
+        b.tvFallbackHint.text = if (notReady != null) {
+            getString(R.string.engine_fallback_not_ready, notReady.reason)
+        } else {
+            getString(R.string.engine_fallback_hint)
+        }
     }
 
     // ================= v1.17.0 本地大模型（腾讯 Hy-MT2-1.8B）=================
@@ -571,7 +607,8 @@ class EngineSettingsActivity : BaseActivity() {
             // 用户若把源语言设成"日语"，用它去测英文样例会得到一个明显错误的结果，
             // 从而误判"这个引擎坏了"。测试翻译的目的是验证密钥/网络连通性，
             // 就该用与源语言无关的固定输入。
-            val result = TranslatorFactory.current(useCache = false).translate(
+            // v1.29.0：测的是主引擎本身，不能让备用引擎"代答"把主引擎的故障掩盖掉
+            val result = TranslatorFactory.primaryOnly(useCache = false).translate(
                 "Hello! This is a translation test.",
                 App.prefs.targetLang,
                 SOURCE_AUTO

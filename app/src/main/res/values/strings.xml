@@ -170,7 +170,7 @@
     <!-- activity_engine_settings.xml -->
     <string name="engine_settings_t08">在 Google Cloud Console 启用 Cloud Translation API 后创建 API Key。注意大陆网络需自备访问条件</string>
     <string name="engine_settings_t09">在 console.anthropic.com 获取。大陆网络需自备访问条件</string>
-    <string name="engine_settings_t10">在 deepl.com 注册 DeepL API Free 计划获取。Free 每月 50 万字符；key 以 :fx 结尾自动走免费端点</string>
+    <string name="engine_settings_t10">在 deepl.com 注册 DeepL API 免费计划获取。新的 Developer 计划共 100 万字符（一次性额度，用完不重置）；key 以 :fx 结尾自动走免费端点</string>
     <string name="engine_settings_t11">在 fanyi-api.baidu.com 注册获取。标准版每月 5 万字符免费，国内直连</string>
     <string name="engine_settings_t12">在 open.bigmodel.cn 获取。glm-4-flash 免费调用，国内直连</string>
     <string name="engine_settings_t13">在 platform.caiyunapp.com 申请。新用户 100 万字免费额度，国内直连</string>
@@ -351,6 +351,39 @@
     <string name="engine_settings_t48">源语言</string>
     <string name="engine_settings_t49">译文语言</string>
     <string name="engine_settings_t50">自动识别（推荐）</string>
+    <string name="trigger_skip_same_title">原文已是目标语言就不翻</string>
+    <string name="trigger_skip_same_desc">全屏、划词、复制即翻译生效；全屏模式只翻不是目标语言的那几行。英、法、德、西之间分不出来，目标语言是它们时不跳过</string>
+    <string name="trigger_app_filter_title">按 App 设置</string>
+    <string name="tile_ball_label">翻译悬浮球</string>
+    <string name="tile_fullscreen_label">全屏翻译</string>
+    <string name="tile_need_overlay">需要悬浮窗权限</string>
+    <string name="tile_need_accessibility">无障碍未开启</string>
+    <string name="share_text_label">翻译</string>
+    <string name="share_image_label">翻译图片</string>
+    <string name="trigger_dict_title">单词查词</string>
+    <string name="trigger_dict_desc">选中的是单个英文（或其它拉丁 / 西里尔字母）单词时，显示音标、词性和几个常用释义。需要 AI 引擎或必应网页版（必应不给音标）；其它引擎照常翻译</string>
+    <string name="glossary_title">术语表</string>
+    <string name="glossary_btn">术语表（%1$d 条）</string>
+    <string name="glossary_desc">指定固定译法，比如游戏里的人名、技能名或专业词。一行一条，格式「原文 = 译文」，# 开头的行是注释。\n\nAI 引擎会把这段原文里用到的术语写进提示词；传统机翻、必应和本地模型会在送出前把原文里的术语直接换成译文。英文按整词匹配、不分大小写，中日韩按字面匹配。</string>
+    <string name="glossary_hint">Ash = 小智\nPikachu = 皮卡丘\n# 这是注释</string>
+    <string name="glossary_saved">已保存 %1$d 条术语</string>
+    <string name="glossary_count">已识别 %1$d 条</string>
+    <string name="app_filter_title">按 App 设置自动翻译</string>
+    <string name="app_filter_desc">只影响自动触发的翻译（全屏、划词、复制即翻译）。悬浮球、框选、菜单划词这些你主动点的操作在任何 App 里都照常可用。</string>
+    <string name="app_filter_mode_off">不限制（所有 App 都自动翻译）</string>
+    <string name="app_filter_mode_block">勾选的 App 不自动翻译</string>
+    <string name="app_filter_mode_allow">只在勾选的 App 里自动翻译</string>
+    <string name="app_filter_search_hint">搜索 App</string>
+    <string name="app_filter_loading">正在读取 App 列表…</string>
+    <string name="app_filter_count">共 %1$d 个 App，已勾选 %2$d 个</string>
+    <string name="app_filter_summary_off">不限制</string>
+    <string name="app_filter_summary_block">%1$d 个 App 不自动翻译</string>
+    <string name="app_filter_summary_allow">只在 %1$d 个 App 里自动翻译</string>
+    <string name="app_filter_allow_empty">⚠️ 「只在勾选的 App 里」但一个都没勾，自动翻译在所有 App 里都不会触发</string>
+    <string name="engine_fallback_title">备用引擎（主引擎失败时自动改用）</string>
+    <string name="engine_fallback_none">不使用</string>
+    <string name="engine_fallback_hint">主引擎翻译失败（比如必应网页版失效、断网、额度用完）时，自动改用这里选的引擎再试一次；之后 1 分钟内直接走备用，不再先等主引擎超时。备用引擎需要先在上面配好。</string>
+    <string name="engine_fallback_not_ready">⚠️ 备用引擎还没配好，暂时不会生效：%1$s</string>
     <string name="engine_settings_t51">让模型自己判断原文语言。中日混排、纯短句偶尔会判错，判错时可以在这里手动指定。</string>
     <string name="engine_settings_t33">目标语言（源语言自动识别）</string>
 
@@ -444,6 +477,14 @@
 
     <!-- activity_permission.xml -->
     <string name="permission_t05">防止服务被杀（推荐设置一次）</string>
+    <string name="permission_restore_title">强行停止后自动恢复无障碍</string>
+    <string name="permission_restore_btn">怎么开启</string>
+    <string name="permission_restore_on">✅ 已授权：被系统关掉后，打开 App 会自动恢复</string>
+    <string name="permission_restore_off">⚠️ 未授权（需用电脑 adb 授权一次）</string>
+    <string name="permission_restore_dialog_title">用 adb 授权一次</string>
+    <string name="permission_restore_dialog_body">强行停止 App 时，系统会顺带关掉它的无障碍服务，App 自己没有权限重新打开。\n\n用数据线连上电脑、开启 USB 调试，在电脑上运行下面这条命令（只需一次，卸载 App 才会失效）：\n\n%1$s\n\n授权后，每次打开 App 或开机时，如果发现无障碍被系统关了，会自动重新开启。你在系统设置里主动关掉的，不会被自动打开。</string>
+    <string name="permission_restore_copy">复制命令</string>
+    <string name="permission_restore_copied">命令已复制</string>
 
     <!-- activity_engine_settings.xml -->
     <string name="engine_settings_t38">阿里云百炼 API Key (sk-...)</string>
@@ -510,6 +551,21 @@
     <string name="image_translate_t07">正在申请屏幕截图权限…</string>
     <string name="image_translate_t08">正在翻译中，请稍候</string>
     <string name="history_t03">没有可导出的记录</string>
+    <!-- v1.29.0 历史页改 XML + M3 -->
+    <string name="history_search_hint">搜索原文或译文</string>
+    <string name="history_filter_favorites">收藏</string>
+    <string name="history_action_export">导出</string>
+    <string name="history_action_clear">清空</string>
+    <string name="history_btn_copy">复制</string>
+    <string name="history_btn_speak_translated">译文</string>
+    <string name="history_btn_speak_source">原文</string>
+    <string name="history_btn_delete">删除</string>
+    <string name="history_btn_favorite">收藏</string>
+    <string name="history_btn_unfavorite">取消收藏</string>
+    <string name="history_count">共 %1$d 条</string>
+    <string name="history_empty_all">还没有翻译记录。\n开启无障碍服务或使用悬浮球翻译后，结果会自动记在这里。</string>
+    <string name="history_empty_favorites">还没有收藏的记录。\n点条目右上角的星标可加入收藏。</string>
+    <string name="history_empty_search">没有匹配「%1$s」的记录</string>
     <string name="camera_translate_t05">没有相机权限，无法拍照</string>
     <string name="engine_settings_t45">测试中…</string>
     <string name="camera_translate_t06">相机还没就绪</string>

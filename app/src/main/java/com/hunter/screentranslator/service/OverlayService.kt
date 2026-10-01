@@ -250,6 +250,12 @@ class OverlayService : Service() {
             } ?: Log.w(TAG, "翻译面板不存在")
         }
 
+        /** 显示词典词条（v1.29.0 单词查词模式） */
+        fun showDict(entry: com.hunter.screentranslator.api.DictEntry) {
+            val svc = instance ?: return
+            svc.overlayView?.post { svc.overlayView?.showDictEntry(entry) }
+        }
+
         fun start(ctx: android.content.Context) {
             val intent = Intent(ctx, OverlayService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

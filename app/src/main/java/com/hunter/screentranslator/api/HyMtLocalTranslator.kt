@@ -44,6 +44,12 @@ private val HYMT_TARGET_NAMES = mapOf(
     "de" to "德语",
     "es" to "西班牙语",
     "ru" to "俄语",
+    // v1.29.0：Hy-MT2 支持的 33 种语言里包含这几种
+    "zh-TW" to "繁体中文",
+    "vi" to "越南语",
+    "th" to "泰语",
+    "id" to "印尼语",
+    "ar" to "阿拉伯语",
 )
 
 /**

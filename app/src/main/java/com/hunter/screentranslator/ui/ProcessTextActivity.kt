@@ -8,6 +8,7 @@ import androidx.lifecycle.lifecycleScope
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.api.TranslatorFactory
 import com.hunter.screentranslator.service.OverlayService
+import com.hunter.screentranslator.service.WordLookup
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -35,6 +36,8 @@ class ProcessTextActivity : AppCompatActivity() {
         runCatching { OverlayService.start(this) }
 
         lifecycleScope.launch {
+            // v1.29.0：选中单个单词时先查词
+            if (WordLookup.tryShow(text, "[菜单划词]")) return@launch
             OverlayService.update(text.take(300), "正在翻译…")
             val result = TranslatorFactory.current().translate(text, App.prefs.targetLang, App.prefs.sourceLang)
             val translated = result.fold(

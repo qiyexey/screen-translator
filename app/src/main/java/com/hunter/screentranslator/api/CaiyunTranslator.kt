@@ -37,6 +37,12 @@ class CaiyunTranslator(
                 // trans_type 的格式是 "<源>2<目标>"，彩云把小写 "auto" 识别为自动检测。
                 // 彩云的语言码与内部码一致（zh/en/ja/ko/fr/de/es/ru 全部相同），
                 // 所以显式指定时可以直接用内部码，不需要额外的映射表。
+                // v1.29.0：新增的 5 种语言彩云没有对应（或无法确认）的码，
+                // 明确报错引导换引擎，而不是发一个必失败、报错还看不懂的请求
+                require(targetLang in CAIYUN_LANGS) { "彩云小译不支持目标语言：${LANG_DISPLAY[targetLang] ?: targetLang}，请换用其它引擎" }
+                require(sourceLang == SOURCE_AUTO || sourceLang in CAIYUN_LANGS) {
+                    "彩云小译不支持源语言：${LANG_DISPLAY[sourceLang] ?: sourceLang}"
+                }
                 val transType = "${sourceLang}2$targetLang"
 
                 // 多行文本按行拆分翻译（彩云按行返回）
@@ -75,4 +81,9 @@ class CaiyunTranslator(
                 }
             }
         }
+
+    private companion object {
+        /** 彩云确认支持、且码与内部码一致的语言 */
+        val CAIYUN_LANGS = setOf("zh", "en", "ja", "ko", "fr", "de", "es", "ru")
+    }
 }

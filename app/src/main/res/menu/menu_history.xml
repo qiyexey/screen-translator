@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 翻译历史页的 TopAppBar 动作：导出 / 清空（原来是页面里两个等宽灰按钮） -->
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <item
+        android:id="@+id/action_export"
+        android:icon="@drawable/ic_share"
+        android:title="@string/history_action_export"
+        app:showAsAction="always" />
+
+    <item
+        android:id="@+id/action_clear"
+        android:icon="@drawable/ic_delete"
+        android:title="@string/history_action_clear"
+        app:showAsAction="always" />
+</menu>

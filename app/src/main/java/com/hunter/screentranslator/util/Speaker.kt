@@ -259,6 +259,12 @@ object Speaker {
         "de" -> Locale.GERMAN
         "es" -> Locale("es", "ES")
         "ru" -> Locale("ru", "RU")
+        "zh-TW" -> Locale.TRADITIONAL_CHINESE
+        "vi" -> Locale("vi", "VN")
+        "th" -> Locale("th", "TH")
+        // 不能写 Locale("id")：Java 会把它改写成旧码 "in"，部分 TTS 引擎认不出
+        "id" -> Locale.forLanguageTag("id-ID")
+        "ar" -> Locale("ar")
         else -> Locale.getDefault()
     }
 

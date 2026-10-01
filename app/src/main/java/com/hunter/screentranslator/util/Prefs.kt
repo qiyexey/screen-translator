@@ -101,7 +101,7 @@ class Prefs(context: Context) {
             KEY_ENGINE, KEY_BASE_URL, KEY_MODEL, KEY_OPENAI_BASE_URL, KEY_OPENAI_MODEL,
             KEY_CLAUDE_MODEL, KEY_QWEN_MODEL, KEY_GLM_MODEL, KEY_DOUBAO_MODEL,
             KEY_MS_REGION, KEY_SOURCE_LANG, KEY_TARGET_LANG, KEY_HYMT_QUANT,
-            KEY_HYMT_CONTEXT, KEY_HYMT_THREADS, KEY_LIVE_ROI
+            KEY_HYMT_CONTEXT, KEY_HYMT_THREADS, KEY_LIVE_ROI, KEY_FALLBACK_ENGINE
         )
         val normal = sp.all
         val secret = spSecret.all
@@ -139,7 +139,7 @@ class Prefs(context: Context) {
         if (moved > 0) Log.i(TAG, "migrated $moved plaintext secret(s) to encrypted store")
     }
 
-    /** DeepSeek（默认引擎）API Key —— v1.18.0 起加密存储 */
+    /** DeepSeek API Key —— v1.18.0 起加密存储 */
     var apiKey: String
         get() = getSecret(KEY_API_KEY)
         set(value) = putSecret(KEY_API_KEY, value)
@@ -154,8 +154,63 @@ class Prefs(context: Context) {
 
     /** 翻译引擎：deepseek / google / microsoft / deepl */
     var engine: String
-        get() = sp.getString(KEY_ENGINE, "deepseek") ?: "deepseek"
+        get() = sp.getString(KEY_ENGINE, TranslationEngine.BING_WEB.key) ?: TranslationEngine.BING_WEB.key
         set(value) = sp.edit().putString(KEY_ENGINE, value).apply()
+
+    /**
+     * 备用引擎（v1.29.0）：主引擎翻译失败时自动改用它。空串 = 不启用。
+     * 典型用法：主引擎是随时可能失效的必应网页版，备用填一家有 Key 的正式引擎或本地模型。
+     */
+    /** 自定义术语表原文（v1.29.0），格式见 [Glossary]；不是密钥，明文存 */
+    var glossaryRaw: String
+        get() = sp.getString(KEY_GLOSSARY, "") ?: ""
+        set(value) = sp.edit().putString(KEY_GLOSSARY, value).apply()
+
+    /** 解析后的术语表（同一份文本只解析一次） */
+    fun glossaryEntries(): List<Glossary.Entry> = Glossary.parse(glossaryRaw)
+
+    /**
+     * 选中的是单个单词时显示词典释义（v1.29.0，默认开）。
+     * 只有 AI 引擎和必应支持查词，其它引擎照常翻译。
+     */
+    var dictionaryMode: Boolean
+        get() = sp.getBoolean(KEY_DICTIONARY_MODE, true)
+        set(value) = sp.edit().putBoolean(KEY_DICTIONARY_MODE, value).apply()
+
+    var fallbackEngine: String
+        get() = sp.getString(KEY_FALLBACK_ENGINE, "") ?: ""
+        set(value) = sp.edit().putString(KEY_FALLBACK_ENGINE, value).apply()
+
+    /**
+     * 原文已经是目标语言时跳过（v1.29.0，默认开）。只作用于自动触发的入口
+     * （全屏 / 划词 / 复制即翻译），见 ScriptDetector。
+     */
+    var skipSameLanguage: Boolean
+        get() = sp.getBoolean(KEY_SKIP_SAME_LANG, true)
+        set(value) = sp.edit().putBoolean(KEY_SKIP_SAME_LANG, value).apply()
+
+    /**
+     * 按 App 过滤自动翻译（v1.29.0）：[AppFilterMode] 的 OFF / BLOCK / ALLOW。
+     * BLOCK = 名单里的 App 不自动翻译；ALLOW = 只在名单里的 App 自动翻译。
+     */
+    var appFilterMode: String
+        get() = AppFilterMode.normalize(sp.getString(KEY_APP_FILTER_MODE, AppFilterMode.OFF))
+        set(value) = sp.edit().putString(KEY_APP_FILTER_MODE, AppFilterMode.normalize(value)).apply()
+
+    var appFilterPackages: Set<String>
+        get() = sp.getStringSet(KEY_APP_FILTER_PACKAGES, emptySet())?.toSet() ?: emptySet()
+        // 必须存一份新的 Set：SharedPreferences 返回的实例不能原地修改再写回
+        set(value) = sp.edit().putStringSet(KEY_APP_FILTER_PACKAGES, HashSet(value)).apply()
+
+    /** [pkg] 是否允许自动翻译（OFF 时永远允许；包名未知时也放行，不误伤） */
+    fun autoTranslateAllowedIn(pkg: String?): Boolean {
+        if (pkg.isNullOrBlank()) return true
+        return when (appFilterMode) {
+            AppFilterMode.BLOCK -> pkg !in appFilterPackages
+            AppFilterMode.ALLOW -> pkg in appFilterPackages
+            else -> true
+        }
+    }
 
     /** Google Cloud Translation API Key */
     var googleApiKey: String
@@ -352,6 +407,14 @@ class Prefs(context: Context) {
         get() = sp.getFloat(KEY_PANEL_ALPHA, 1f)
         set(value) = sp.edit().putFloat(KEY_PANEL_ALPHA, value.coerceIn(0.4f, 1f)).apply()
 
+    /** 翻译结果面板位置（px，v1.29.0）：拖动松手后记住，下次从这里出现；-1 = 未记录 */
+    var panelX: Int
+        get() = sp.getInt(KEY_PANEL_X, -1)
+        set(value) = sp.edit().putInt(KEY_PANEL_X, value).apply()
+    var panelY: Int
+        get() = sp.getInt(KEY_PANEL_Y, -1)
+        set(value) = sp.edit().putInt(KEY_PANEL_Y, value).apply()
+
     /** Whisper 语音识别：OpenAI 兼容 /v1/audio/transcriptions，语音翻译使用。 */
     var asrApiKey: String
         get() = getSecret(KEY_ASR_API_KEY)
@@ -420,6 +483,15 @@ class Prefs(context: Context) {
     var accessibilityEverOn: Boolean
         get() = sp.getBoolean(KEY_ACCESSIBILITY_EVER_ON, false)
         set(value) = sp.edit().putBoolean(KEY_ACCESSIBILITY_EVER_ON, value).apply()
+
+    /**
+     * 用户是否**主动**在系统设置里关掉了无障碍（v1.29.0）。
+     * 进程活着时服务被解绑 = 用户自己关的，此时自动恢复不该违背用户意愿；
+     * 强行停止是直接杀进程，走不到 onUnbind，所以不会被误记。见 AccessibilityRestore。
+     */
+    var accessibilityUserDisabled: Boolean
+        get() = sp.getBoolean(KEY_ACCESSIBILITY_USER_DISABLED, false)
+        set(value) = sp.edit().putBoolean(KEY_ACCESSIBILITY_USER_DISABLED, value).apply()
 
     /**
      * 首次引导是否已完成（v1.13.0）。
@@ -634,6 +706,14 @@ class Prefs(context: Context) {
         private const val KEY_BALL_SIZE = "ball_size"
         private const val KEY_BALL_COLOR = "ball_color"
         private const val KEY_PANEL_ALPHA = "panel_alpha"
+        private const val KEY_PANEL_X = "panel_x"
+        private const val KEY_FALLBACK_ENGINE = "fallback_engine"
+        private const val KEY_GLOSSARY = "glossary"
+        private const val KEY_DICTIONARY_MODE = "dictionary_mode"
+        private const val KEY_SKIP_SAME_LANG = "skip_same_lang"
+        private const val KEY_APP_FILTER_MODE = "app_filter_mode"
+        private const val KEY_APP_FILTER_PACKAGES = "app_filter_packages"
+        private const val KEY_PANEL_Y = "panel_y"
         private const val KEY_ASR_API_KEY = "asr_api_key"
         private const val KEY_ASR_BASE_URL = "asr_base_url"
         private const val KEY_ASR_MODEL = "asr_model"
@@ -642,6 +722,7 @@ class Prefs(context: Context) {
         /** v1.25.0 图片翻译呈现方式（overlay / region） */
         private const val KEY_IMAGE_MODE = "image_translate_mode"
         private const val KEY_ACCESSIBILITY_EVER_ON = "accessibility_ever_on"
+        private const val KEY_ACCESSIBILITY_USER_DISABLED = "accessibility_user_disabled"
         private const val KEY_ONBOARDING_DONE = "onboarding_done"
         private const val KEY_TTS_AUTO_SPEAK = "tts_auto_speak"
         private const val KEY_TTS_RATE = "tts_rate"
@@ -789,3 +870,14 @@ object TtsContent {
         if (OPTIONS.any { it.first == value }) value!! else TRANSLATED
 }
 
+/** 按 App 过滤自动翻译的模式（v1.29.0）。存字符串，理由同 [ImageTranslateMode]。 */
+object AppFilterMode {
+    const val OFF = "off"
+    const val BLOCK = "block"
+    const val ALLOW = "allow"
+
+    fun normalize(value: String?): String = when (value) {
+        BLOCK, ALLOW -> value
+        else -> OFF
+    }
+}

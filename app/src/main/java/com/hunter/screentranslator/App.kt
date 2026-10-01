@@ -6,6 +6,7 @@ import android.content.ComponentCallbacks2
 import android.os.Bundle
 import com.hunter.screentranslator.api.HyMtRuntime
 import com.hunter.screentranslator.service.OverlayService
+import com.hunter.screentranslator.util.AccessibilityRestore
 import com.hunter.screentranslator.util.CrashLog
 import com.hunter.screentranslator.util.HistoryStore
 import com.hunter.screentranslator.util.Prefs
@@ -54,6 +55,10 @@ class App : Application() {
         // 幂等；失败也只是这次没迁成，不会丢数据（见 Prefs.migrateSecrets）。
         runCatching { prefs.migrateSecrets() }
             .onFailure { android.util.Log.w("App", "secret migration skipped", it) }
+
+        // v1.29.0：被强行停止后 ROM 会把无障碍从系统列表里删掉；用户授过
+        // WRITE_SECURE_SETTINGS 的话，进程一启动就写回去，不用再进设置重开。
+        AccessibilityRestore.restoreIfNeeded(this)
 
         // v1.2.0 一次性迁移：全屏自动翻译改为默认关（干扰大、费 API）
         if (!prefs.migratedV12) {

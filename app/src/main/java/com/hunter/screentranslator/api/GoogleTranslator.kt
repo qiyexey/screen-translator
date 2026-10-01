@@ -74,6 +74,7 @@ class GoogleTranslator(
 
     private fun googleLangCode(code: String): String = when (code) {
         "zh" -> "zh-CN"
+        // zh-TW / vi / th / id / ar 与 Google 的码一致
         else -> code
     }
 }

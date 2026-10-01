@@ -7,6 +7,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import com.hunter.screentranslator.util.Glossary
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -22,8 +23,10 @@ open class OpenAICompatibleTranslator(
     private val model: String,
     private val engineName: String = "AI",
     /** 共享 client（HttpClients 单例）；测试可注入替身 */
-    private val client: OkHttpClient = HttpClients.llm
-) : Translator {
+    private val client: OkHttpClient = HttpClients.llm,
+    /** v1.29.0 自定义术语表：用到的那几条写进提示词 */
+    private val glossary: List<Glossary.Entry> = emptyList()
+) : Translator, DictionaryLookup {
 
     /**
      * v1.8.0 图片翻译（OpenAI 兼容多模态格式）。
@@ -63,7 +66,8 @@ open class OpenAICompatibleTranslator(
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
                         put("role", "system")
-                        put("content", buildImageSystemPrompt(targetName, hint, sourceName))
+                        put("content", buildImageSystemPrompt(targetName, hint, sourceName) +
+                            Glossary.promptSectionAll(glossary))
                     })
                     put(JSONObject().apply {
                         put("role", "user")
@@ -132,7 +136,8 @@ open class OpenAICompatibleTranslator(
                     put("messages", JSONArray().apply {
                         put(JSONObject().apply {
                             put("role", "system")
-                            put("content", buildSystemPrompt(targetName, sourceName))
+                            put("content", buildSystemPrompt(targetName, sourceName) +
+                                Glossary.promptSection(text, glossary))
                         })
                         put(JSONObject().apply {
                             put("role", "user")
@@ -246,6 +251,46 @@ open class OpenAICompatibleTranslator(
      */
     private fun sourceNameOf(sourceLang: String): String? =
         if (sourceLang == SOURCE_AUTO) null else (LANG_DISPLAY[sourceLang] ?: sourceLang)
+
+    /** v1.29.0 单词查词：同一个 chat 接口，换一段要求只回 JSON 的提示词 */
+    override suspend fun lookup(word: String, targetLang: String, sourceLang: String): Result<DictEntry> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                require(apiKey.isNotBlank()) { "未配置 $engineName API Key" }
+                val targetName = LANG_DISPLAY[targetLang] ?: targetLang
+                val srcNote = sourceNameOf(sourceLang)?.let { "\n这个词是 $it。" }.orEmpty()
+                val body = JSONObject().apply {
+                    put("model", model.ifBlank { "deepseek-chat" })
+                    put("temperature", 0.1)
+                    put("stream", false)
+                    put("messages", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("role", "system")
+                            put("content", DictEntry.prompt(targetName) + srcNote)
+                        })
+                        put(JSONObject().apply {
+                            put("role", "user")
+                            put("content", word.trim())
+                        })
+                    })
+                }.toString()
+                val req = Request.Builder()
+                    .url(endpoint)
+                    .header("Authorization", "Bearer $apiKey")
+                    .header("Content-Type", "application/json")
+                    .post(body.toRequestBody("application/json".toMediaType()))
+                    .build()
+                val content = client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        throw RuntimeException("HTTP ${resp.code}: ${resp.body?.string().orEmpty().take(300)}")
+                    }
+                    JSONObject(resp.body?.string() ?: throw RuntimeException("空响应"))
+                        .getJSONArray("choices").getJSONObject(0)
+                        .getJSONObject("message").getString("content")
+                }
+                DictEntry.parseAiJson(content, word.trim())
+            }
+        }
 
     companion object {
         /** 视觉请求的输出上限：长截图的长译文需要足够空间，否则会被截断 */

@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.29.0：按 App 设置自动翻译 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?attr/colorSurface"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/topAppBar"
+        style="@style/Widget.ScreenTranslator.Toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        app:navigationIcon="@drawable/ic_arrow_back"
+        app:navigationContentDescription="@string/common_btn_back_content_description"
+        app:title="@string/app_filter_title" />
+
+    <com.google.android.material.divider.MaterialDivider
+        style="@style/Widget.ScreenTranslator.Divider"
+        android:layout_width="match_parent"
+        android:layout_height="1dp" />
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="20dp"
+        android:paddingTop="12dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_filter_desc"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="12sp" />
+
+        <RadioGroup
+            android:id="@+id/rgMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp">
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
+                android:id="@+id/rbOff"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/app_filter_mode_off" />
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
+                android:id="@+id/rbBlock"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/app_filter_mode_block" />
+
+            <com.google.android.material.radiobutton.MaterialRadioButton
+                android:id="@+id/rbAllow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/app_filter_mode_allow" />
+        </RadioGroup>
+
+        <com.google.android.material.textfield.TextInputLayout
+            android:id="@+id/searchLayout"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:hint="@string/app_filter_search_hint"
+            app:startIconDrawable="@drawable/ic_search">
+
+            <com.google.android.material.textfield.TextInputEditText
+                android:id="@+id/etSearch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:inputType="text"
+                android:maxLines="1" />
+        </com.google.android.material.textfield.TextInputLayout>
+
+        <TextView
+            android:id="@+id/tvCount"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="@string/app_filter_loading"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="12sp" />
+    </LinearLayout>
+
+    <ListView
+        android:id="@+id/listApps"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:choiceMode="none"
+        android:divider="@null"
+        android:paddingHorizontal="12dp" />
+</LinearLayout>

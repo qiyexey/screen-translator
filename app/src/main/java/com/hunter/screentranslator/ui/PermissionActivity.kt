@@ -1,5 +1,7 @@
 package com.hunter.screentranslator.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
 import android.content.Intent
 import android.net.Uri
 import android.os.Build
@@ -11,6 +13,7 @@ import com.hunter.screentranslator.App
 import com.hunter.screentranslator.R
 import com.hunter.screentranslator.databinding.ActivityPermissionBinding
 import com.hunter.screentranslator.service.OverlayService
+import com.hunter.screentranslator.util.AccessibilityRestore
 import com.hunter.screentranslator.util.EdgeToEdge
 
 /**
@@ -65,6 +68,7 @@ class PermissionActivity : BaseActivity() {
 
         // v1.7.0：电池优化白名单（防 ROM 杀后台导致无障碍掉线）
         b.btnBatteryOptimize.setOnClickListener { requestIgnoreBatteryOptimizations() }
+        b.btnRestoreHelp.setOnClickListener { showRestoreHelp() }
     }
 
     override fun onResume() {
@@ -93,6 +97,27 @@ class PermissionActivity : BaseActivity() {
         b.tvBatteryStatus.text =
             if (ignoring) "✅ 已忽略电池优化" else "⚠️ 未设置（服务可能被系统杀掉）"
         b.tvBatteryStatus.setTextColor(if (ignoring) ok else warn)
+
+        // v1.29.0：自动恢复无障碍是否已经 adb 授权
+        val canRestore = AccessibilityRestore.canRestore(this)
+        b.tvRestoreStatus.text = getString(
+            if (canRestore) R.string.permission_restore_on else R.string.permission_restore_off
+        )
+        b.tvRestoreStatus.setTextColor(if (canRestore) ok else warn)
+    }
+
+    private fun showRestoreHelp() {
+        val cmd = AccessibilityRestore.ADB_GRANT_COMMAND
+        AlertDialog.Builder(this)
+            .setTitle(R.string.permission_restore_dialog_title)
+            .setMessage(getString(R.string.permission_restore_dialog_body, cmd))
+            .setPositiveButton(R.string.permission_restore_copy) { _, _ ->
+                val cm = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+                cm.setPrimaryClip(ClipData.newPlainText("adb", cmd))
+                toast(getString(R.string.permission_restore_copied))
+            }
+            .setNegativeButton("关闭", null)
+            .show()
     }
 
 }

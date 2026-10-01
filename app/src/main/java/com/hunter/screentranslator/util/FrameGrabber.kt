@@ -78,10 +78,7 @@ class FrameGrabber(private val ctx: Context) {
             Log.e(TAG, "屏幕尺寸异常: ${sw}x$sh")
             return false
         }
-        val longSide = max(sw, sh)
-        val scale = if (longSide > MAX_LONG_SIDE) MAX_LONG_SIDE.toFloat() / longSide else 1f
-        val fw = (sw * scale).roundToInt().coerceAtLeast(2)
-        val fh = (sh * scale).roundToInt().coerceAtLeast(2)
+        val (fw, fh) = frameSizeFor(sw, sh)
 
         return try {
             thread = HandlerThread("st-live-capture").apply { start() }
@@ -113,6 +110,10 @@ class FrameGrabber(private val ctx: Context) {
     @Synchronized
     fun grabRoi(screenRoi: Rect?): Bitmap? {
         if (!running) return null
+        // 旋转 / 折叠屏展开后，旧尺寸的 VirtualDisplay 会被 AUTO_MIRROR 加黑边塞进去，
+        // 而 Roi.toFrameCoords 按宽高分别缩放 → 裁出来的区域整体错位。
+        // 检测到屏幕尺寸变化就按新尺寸重建取帧面，本轮跳过（等新尺寸的第一帧）。
+        if (resizeIfScreenChanged()) return null
         val r = reader ?: return null
 
         var img: Image? = null
@@ -159,6 +160,46 @@ class FrameGrabber(private val ctx: Context) {
             null
         } finally {
             runCatching { img?.close() }
+        }
+    }
+
+    private fun frameSizeFor(sw: Int, sh: Int): Pair<Int, Int> {
+        val longSide = max(sw, sh)
+        val scale = if (longSide > MAX_LONG_SIDE) MAX_LONG_SIDE.toFloat() / longSide else 1f
+        return (sw * scale).roundToInt().coerceAtLeast(2) to (sh * scale).roundToInt().coerceAtLeast(2)
+    }
+
+    /**
+     * 屏幕尺寸变了就把 VirtualDisplay 改到新尺寸，并换一个匹配的 ImageReader。
+     *
+     * 用 resize() + setSurface() 而不是重新 createVirtualDisplay：Android 14 起
+     * 同一个 MediaProjection 只允许 createVirtualDisplay 一次，再建会抛异常。
+     *
+     * @return true 表示刚重建过（本轮没有可用帧）
+     */
+    private fun resizeIfScreenChanged(): Boolean {
+        val vd = display ?: return false
+        val dm = screenMetrics()
+        if (dm.widthPixels <= 0 || dm.heightPixels <= 0) return false
+        val (fw, fh) = frameSizeFor(dm.widthPixels, dm.heightPixels)
+        if (fw == frameWidth && fh == frameHeight) return false
+
+        var newReader: ImageReader? = null
+        return try {
+            newReader = ImageReader.newInstance(fw, fh, PixelFormat.RGBA_8888, 2)
+            vd.resize(fw, fh, dm.densityDpi)
+            vd.surface = newReader.surface
+            runCatching { reader?.close() }
+            reader = newReader
+            frameWidth = fw
+            frameHeight = fh
+            Log.i(TAG, "屏幕尺寸变化，取帧面重建为 ${fw}x$fh")
+            true
+        } catch (e: Exception) {
+            // 重建失败就沿用旧取帧面（坐标可能偏，但不至于完全停摆）
+            if (reader !== newReader) runCatching { newReader?.close() }
+            Log.w(TAG, "取帧面重建失败: $e")
+            false
         }
     }
 

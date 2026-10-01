@@ -183,6 +183,51 @@
                         android:textColor="?attr/colorPrimary" />
                 </LinearLayout>
 
+                <com.google.android.material.divider.MaterialDivider
+                    style="@style/Widget.ScreenTranslator.Divider"
+                    android:layout_width="match_parent"
+                    android:layout_height="1dp"
+                    android:layout_marginTop="10dp" />
+
+                <!-- v1.29.0：被强行停止后自动恢复无障碍（需 adb 授权一次） -->
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="10dp"
+                    android:orientation="horizontal"
+                    android:gravity="center_vertical">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:orientation="vertical">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/permission_restore_title"
+                            android:textColor="?attr/colorOnSurface"
+                            android:textSize="14sp" />
+
+                        <TextView
+                            android:id="@+id/tvRestoreStatus"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="2dp"
+                            android:text="@string/common_tv_engine_status"
+                            android:textSize="12sp" />
+                    </LinearLayout>
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRestoreHelp"
+                        style="@style/Widget.ScreenTranslator.Button.Text"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/permission_restore_btn"
+                        android:textColor="?attr/colorPrimary" />
+                </LinearLayout>
+
                 <TextView
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

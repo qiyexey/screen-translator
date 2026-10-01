@@ -15,7 +15,9 @@ import android.view.accessibility.AccessibilityNodeInfo
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.api.Translator
 import com.hunter.screentranslator.api.TranslatorFactory
+import com.hunter.screentranslator.overlay.OverlayView
 import com.hunter.screentranslator.util.HistoryStore
+import com.hunter.screentranslator.util.ScriptDetector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -65,6 +67,9 @@ class ScreenReaderService : AccessibilityService() {
         super.onServiceConnected()
         instance = this
         Log.i(TAG, "无障碍服务已连接")
+        // v1.29.0：连上了 = 用户想开着（或刚被自动恢复），清掉"用户主动关闭"标记
+        App.prefs.accessibilityEverOn = true
+        App.prefs.accessibilityUserDisabled = false
 
         ensureOverlayStarted()
         setupClipboardListener()
@@ -97,6 +102,10 @@ class ScreenReaderService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
+        // 自家悬浮面板改文字（"正在翻译…" → 译文）也会产生 WINDOW_CONTENT_CHANGED。
+        // 不在这里拦掉的话，它会 cancel 掉正在进行的全屏翻译，而新任务又因
+        // lastFullscreenText 相同直接返回 —— 面板永远停在"正在翻译…"。
+        if (event.packageName?.toString() == packageName) return
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED,
@@ -128,6 +137,8 @@ class ScreenReaderService : AccessibilityService() {
         val root = activeRoot() ?: return
         val pkg = root.packageName?.toString()
         if (pkg == packageName) return  // 不翻译自己
+        // v1.29.0：按 App 过滤。被排除的 App 连"读不到文字"的提示都不出，安安静静
+        if (!App.prefs.autoTranslateAllowedIn(pkg)) return
 
         val collected = StringBuilder()
         collectText(root, collected, 0)
@@ -138,10 +149,25 @@ class ScreenReaderService : AccessibilityService() {
             return
         }
         if (text == lastFullscreenText) return
-        lastFullscreenText = text
 
-        Log.i(TAG, "[全屏] 收集 ${text.length} 字符（$pkg），开始翻译")
-        translateAndShow(text, "[全屏]")
+        // v1.29.0：已经是目标语言的行不送去翻译；整屏都是目标语言就整次跳过。
+        // 中文界面里只有几段英文时，只翻那几段，省额度也省时间。
+        val toTranslate = if (App.prefs.skipSameLanguage) {
+            ScriptDetector.dropLinesAlreadyIn(text, App.prefs.targetLang)
+        } else text
+        if (toTranslate.isBlank()) {
+            Log.d(TAG, "[全屏] 整屏已是目标语言，跳过（$pkg）")
+            lastFullscreenText = text
+            return
+        }
+
+        Log.i(TAG, "[全屏] 收集 ${text.length} 字符、需翻译 ${toTranslate.length} 字符（$pkg），开始翻译")
+        // 翻译跑完（成功或失败）才记账：中途被取消（新事件到来）时会抛
+        // CancellationException 跳过这行，下一轮同样的文本还能重新翻；
+        // 失败也记账，是为了不对同一段文字反复烧失败请求（与原行为一致）。
+        // 全屏是整屏文字拼起来的，不会是"一个单词"，也不该被当成查词
+        translateAndShow(toTranslate, "[全屏]", allowDictionary = false)
+        lastFullscreenText = text
     }
 
     // ============================ 模式2：划词翻译 ============================
@@ -156,6 +182,7 @@ class ScreenReaderService : AccessibilityService() {
         val pkg = event.packageName?.toString()
 
         if (pkg == packageName) return
+        if (!App.prefs.autoTranslateAllowedIn(pkg)) return
 
         // 关键过滤：可编辑节点（输入框/搜索框）的选区事件多为系统自动全选（如点击
         // 搜索框全选旧关键词），不是用户主动划词，直接忽略，避免各页面误触发翻译。
@@ -176,6 +203,10 @@ class ScreenReaderService : AccessibilityService() {
             if (selected.length < 2) return@launch
             if (selected == lastSelectionText) return@launch
             lastSelectionText = selected
+            if (App.prefs.skipSameLanguage && ScriptDetector.isAlreadyIn(selected, App.prefs.targetLang)) {
+                Log.d(TAG, "[划词] 选中内容已是目标语言，跳过")
+                return@launch
+            }
 
             Log.i(TAG, "[划词] 选中 ${selected.length} 字符，开始翻译")
             translateAndShow(selected, "[划词]")
@@ -377,17 +408,29 @@ class ScreenReaderService : AccessibilityService() {
         // 注意：Android 10+ 起，后台应用（含无障碍服务）读取剪贴板会被系统限制，
         // primaryClip 通常返回 null。该功能因此可能无效，属平台限制而非缺陷。
         val clip: ClipData? = cm.primaryClip ?: return@OnPrimaryClipChangedListener
+        // 面板「复制译文」写进来的，不再翻一遍
+        if (clip?.description?.label == OverlayView.CLIP_LABEL) return@OnPrimaryClipChangedListener
         val text = clip?.getItemAt(0)?.coerceToText(this)?.toString()?.trim()
             ?: return@OnPrimaryClipChangedListener
         if (text.length < 2 || text == lastClipText) return@OnPrimaryClipChangedListener
         lastClipText = text
+        // v1.29.0：剪贴板事件不带来源 App，用当前前台窗口代替
+        if (!App.prefs.autoTranslateAllowedIn(rootInActiveWindow?.packageName?.toString())) {
+            return@OnPrimaryClipChangedListener
+        }
+        if (App.prefs.skipSameLanguage && ScriptDetector.isAlreadyIn(text, App.prefs.targetLang)) {
+            Log.d(TAG, "[剪贴板] 已是目标语言，跳过")
+            return@OnPrimaryClipChangedListener
+        }
         Log.i(TAG, "[剪贴板] ${text.length} 字符，开始翻译")
         scope.launch { translateAndShow(text, "[剪贴板]") }
     }
 
     // ============================ 公共翻译 ============================
 
-    private suspend fun translateAndShow(text: String, mode: String) {
+    private suspend fun translateAndShow(text: String, mode: String, allowDictionary: Boolean = true) {
+        // v1.29.0：选中的是单个单词时先查词，查到就不再翻译
+        if (allowDictionary && WordLookup.tryShow(text, mode)) return
         OverlayService.update(text.take(300), "正在翻译…")
         // 每次取当前选择的引擎，切换引擎立即生效
         val translator = TranslatorFactory.current()
@@ -463,6 +506,12 @@ class ScreenReaderService : AccessibilityService() {
 
     override fun onUnbind(intent: Intent?): Boolean {
         Log.w(TAG, "无障碍服务被解绑")
+        // v1.29.0：区分"用户在设置里关掉"和"被强行停止"。强行停止时系统也可能先解绑、
+        // 紧接着（毫秒级）杀进程；所以不立刻记账，等 3 秒进程还活着才算用户主动关闭。
+        // 进程被杀，这条 Runnable 随之消失，自动恢复不受影响。
+        android.os.Handler(android.os.Looper.getMainLooper()).postDelayed({
+            if (instance == null) App.prefs.accessibilityUserDisabled = true
+        }, USER_DISABLE_CONFIRM_MS)
         instance = null
         lastFullscreenText = null
         lastSelectionText = null
@@ -483,6 +532,7 @@ class ScreenReaderService : AccessibilityService() {
     companion object {
         private const val TAG = "ScreenTranslator"
         private const val DEBOUNCE_MS = 600L
+        private const val USER_DISABLE_CONFIRM_MS = 3_000L
         private const val SELECTION_DEBOUNCE_MS = 500L
         private const val MAX_DEPTH = 60
 

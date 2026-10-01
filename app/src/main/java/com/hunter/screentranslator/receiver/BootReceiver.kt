@@ -13,6 +13,7 @@ import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
 import androidx.core.app.NotificationCompat
 import com.hunter.screentranslator.App
+import com.hunter.screentranslator.util.AccessibilityRestore
 
 /**
  * 开机自检（v1.7.0）：部分国产 ROM 重启后会"忘记"无障碍服务。
@@ -27,13 +28,16 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         if (!App.prefs.accessibilityEverOn) return  // 从来没开过，不打扰
         if (isAccessibilityEnabled(context)) return  // 开机自动恢复了，不打扰
+        // v1.29.0：用户授过 WRITE_SECURE_SETTINGS 的话直接写回去，不用再发通知
+        if (AccessibilityRestore.restoreIfNeeded(context)) return
 
         notifyReEnable(context)
     }
 
     private fun isAccessibilityEnabled(context: Context): Boolean {
         val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        return am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_GENERIC)
+        // 用 ALL_MASK：只查 GENERIC 的话，以后改了 feedbackType 这里会静默误判成"没开"
+        return am.getEnabledAccessibilityServiceList(AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
             .any { it.resolveInfo.serviceInfo.packageName == context.packageName }
     }
 

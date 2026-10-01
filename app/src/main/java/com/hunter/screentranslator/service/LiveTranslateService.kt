@@ -425,7 +425,7 @@ class LiveTranslateService : Service() {
                 overlay?.setCaptureHidden(true, windowManager)
                 delay(CAPTURE_HIDE_MS)
             }
-            val frozen = grabber?.grabRoi(null)
+            val frozen = grabber?.let { withContext(Dispatchers.Default) { it.grabRoi(null) } }
             if (needHide) overlay?.setCaptureHidden(false, windowManager)
             withContext(Dispatchers.Main) { showPicker(frozen) }
         }
@@ -577,8 +577,10 @@ class LiveTranslateService : Service() {
             if (needHide) {
                 overlay?.setCaptureHidden(false, windowManager)
                 delay(VERIFY_VISIBLE_MS)
-                g.grabRoi(roi)?.let {
-                    try { visibleSig = signature.of(it) } finally { it.recycle() }
+                visibleSig = withContext(Dispatchers.Default) {
+                    g.grabRoi(roi)?.let {
+                        try { signature.of(it) } finally { it.recycle() }
+                    }
                 }
             }
 
@@ -714,7 +716,7 @@ class LiveTranslateService : Service() {
      */
     private suspend fun translateByOnDeviceOcr(crop: Bitmap, hash: Int, epoch: Long): Attempt {
         overlay?.showTranslating()
-        val lines = OcrEngine.recognizeJapanese(crop, throwOnFailure = true)
+        val lines = OcrEngine.recognizeFor(crop, App.prefs.sourceLang, throwOnFailure = true)
         if (!isRequestCurrent(epoch)) return Attempt.STALE
         val newLines = lines.map { it.text.trim() }.filter { it.isNotEmpty() }
 
@@ -938,14 +940,14 @@ class LiveTranslateService : Service() {
                 if (needHide) overlay?.setCaptureHidden(false, windowManager)
                 return@launch
             }
-            val bmp = g.grabRoi(roi)
+            val bmp = withContext(Dispatchers.Default) { g.grabRoi(roi) }
             if (needHide) overlay?.setCaptureHidden(false, windowManager)
             if (bmp == null) {
                 overlay?.showMessage("❌ 取帧失败", "稍后重试")
                 return@launch
             }
             val lines = try {
-                OcrEngine.recognizeJapanese(bmp)
+                OcrEngine.recognizeFor(bmp, App.prefs.sourceLang)
             } catch (e: Exception) {
                 Log.e(TAG, "OCR 自检异常", e)
                 emptyList()

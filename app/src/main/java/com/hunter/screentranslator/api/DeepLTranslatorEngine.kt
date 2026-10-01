@@ -55,7 +55,7 @@ class DeepLTranslatorEngine(
                 // 4xx，被下面的 !resp.isSuccessful 分支原样转成可读错误，
                 // 比我们在这里维护一张会过期的表更可靠。
                 if (sourceLang != SOURCE_AUTO) {
-                    formBuilder.add("source_lang", deeplLangCode(sourceLang))
+                    formBuilder.add("source_lang", deeplSourceCode(sourceLang))
                 }
 
                 val req = Request.Builder()
@@ -82,6 +82,18 @@ class DeepLTranslatorEngine(
             }
         }
 
-    /** DeepL 目标语言代码全大写：ZH、EN、JA... */
-    private fun deeplLangCode(code: String): String = code.uppercase()
+    /**
+     * DeepL 目标语言代码全大写：ZH、EN、JA...
+     * v1.29.0：繁体是 ZH-HANT（简体 ZH 仍可用，等同 ZH-HANS）。
+     */
+    private fun deeplLangCode(code: String): String = when (code) {
+        "zh-TW" -> "ZH-HANT"
+        else -> code.uppercase()
+    }
+
+    /** 源语言不区分简繁，繁体也传 ZH */
+    private fun deeplSourceCode(code: String): String = when (code) {
+        "zh-TW" -> "ZH"
+        else -> code.uppercase()
+    }
 }

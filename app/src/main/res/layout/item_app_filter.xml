@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- v1.29.0：按 App 设置 · 列表项 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:gravity="center_vertical"
+    android:minHeight="56dp"
+    android:orientation="horizontal"
+    android:paddingHorizontal="8dp"
+    android:paddingVertical="6dp">
+
+    <ImageView
+        android:id="@+id/ivIcon"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:contentDescription="@null" />
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="12dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/tvLabel"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="14sp" />
+
+        <TextView
+            android:id="@+id/tvPackage"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:ellipsize="middle"
+            android:maxLines="1"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:textSize="11sp" />
+    </LinearLayout>
+
+    <com.google.android.material.checkbox.MaterialCheckBox
+        android:id="@+id/cbPicked"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:clickable="false"
+        android:focusable="false" />
+</LinearLayout>

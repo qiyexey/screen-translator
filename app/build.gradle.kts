@@ -50,8 +50,8 @@ android {
         applicationId = "com.hunter.screentranslator"
         minSdk = 26
         targetSdk = 35
-        versionCode = 75
-        versionName = "1.28.0"
+        versionCode = 76
+        versionName = "1.29.0"
 
         ndk {
             // v1.11.0：ML Kit 的 OCR 原生库每个 ABI 各带一份，四份合计约 41MB
@@ -227,6 +227,9 @@ dependencies {
     //（实时屏幕翻译若走视觉模型要按次计费；改成本机认字 + 必应翻译则零费用）。
     // 与中文模型同样是 bundled 变体，运行时不需要 GMS。
     implementation("com.google.mlkit:text-recognition-japanese:16.0.1")
+    // v1.29.0：韩文模型。默认引擎改成必应（不能读图）后，图片/实时翻译全靠本机 OCR，
+    // 源语言选韩文时必须有韩文模型，否则一个字都认不出。同样是 bundled 变体。
+    implementation("com.google.mlkit:text-recognition-korean:16.0.1")
 
     // v1.17.0：本地大模型（腾讯 Hy-MT2-1.8B）的推理运行时。
     //

@@ -6,6 +6,7 @@ import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import com.hunter.screentranslator.util.Glossary
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -17,8 +18,10 @@ import org.json.JSONObject
  * 设置项：claudeApiKey、claudeModel（默认 claude-3-5-haiku，便宜快速）
  */
 class ClaudeTranslator(
-    private val client: OkHttpClient = HttpClients.llm
-) : Translator {
+    private val client: OkHttpClient = HttpClients.llm,
+    /** v1.29.0 自定义术语表：用到的那几条写进提示词 */
+    private val glossary: List<Glossary.Entry> = emptyList()
+) : Translator, DictionaryLookup {
 
     /**
      * v1.8.0 图片翻译（Anthropic Messages API 的多模态格式）。
@@ -56,8 +59,10 @@ class ClaudeTranslator(
                     "你是屏幕翻译引擎。读出用户给的截图里所有可见文字并翻译成【$targetName】。" +
                         "只输出译文，按阅读顺序分行；不要描述画面、不要解释。" +
                         "画面里没有文字时只输出：没有识别到文字" +
-                        if (hint.isNullOrBlank()) "" else "\n【本次输入的特殊说明】\n$hint" +
-                        srcNote
+                        // v1.29.0：补上括号。原写法里 `if … else A + srcNote` 会把 srcNote 并进
+                        // else 分支，没有 hint 时（普通图片翻译）用户指定的源语言说明被整段丢掉
+                        (if (hint.isNullOrBlank()) "" else "\n【本次输入的特殊说明】\n$hint") +
+                        srcNote + Glossary.promptSectionAll(glossary)
                 )
                 put("messages", JSONArray().apply {
                     put(JSONObject().apply {
@@ -134,7 +139,8 @@ class ClaudeTranslator(
                 val body = JSONObject().apply {
                     put("model", model)
                     put("max_tokens", 4096)
-                    put("system", "你是实时屏幕翻译引擎。把用户给你的文字翻译成【$targetName】（$srcHint）。只输出译文本身，保留换行结构，不要任何解释。")
+                    put("system", "你是实时屏幕翻译引擎。把用户给你的文字翻译成【$targetName】（$srcHint）。只输出译文本身，保留换行结构，不要任何解释。" +
+                        Glossary.promptSection(text, glossary))
                     put("messages", JSONArray().apply {
                         put(JSONObject().apply {
                             put("role", "user")
@@ -170,6 +176,49 @@ class ClaudeTranslator(
                     }
                     sb.toString().trim()
                 }
+            }
+        }
+
+    /** v1.29.0 单词查词：同一个 messages 接口，换一段要求只回 JSON 的提示词 */
+    override suspend fun lookup(word: String, targetLang: String, sourceLang: String): Result<DictEntry> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val prefs = com.hunter.screentranslator.App.prefs
+                val apiKey = prefs.claudeApiKey.trim()
+                require(apiKey.isNotBlank()) { "未配置 Claude API Key" }
+                val model = prefs.claudeModel.trim().ifBlank { "claude-3-5-haiku-20241022" }
+                val targetName = LANG_DISPLAY[targetLang] ?: targetLang
+                val srcNote = if (sourceLang == SOURCE_AUTO) "" else "\n这个词是 ${LANG_DISPLAY[sourceLang] ?: sourceLang}。"
+                val body = JSONObject().apply {
+                    put("model", model)
+                    put("max_tokens", 1024)
+                    put("system", DictEntry.prompt(targetName) + srcNote)
+                    put("messages", JSONArray().apply {
+                        put(JSONObject().apply {
+                            put("role", "user")
+                            put("content", word.trim())
+                        })
+                    })
+                }.toString()
+                val req = Request.Builder()
+                    .url("https://api.anthropic.com/v1/messages")
+                    .header("x-api-key", apiKey)
+                    .header("anthropic-version", "2023-06-01")
+                    .header("Content-Type", "application/json")
+                    .post(body.toRequestBody("application/json".toMediaType()))
+                    .build()
+                val text = client.newCall(req).execute().use { resp ->
+                    if (!resp.isSuccessful) {
+                        throw RuntimeException("HTTP ${resp.code}: ${resp.body?.string().orEmpty().take(300)}")
+                    }
+                    val content = JSONObject(resp.body?.string() ?: throw RuntimeException("空响应"))
+                        .getJSONArray("content")
+                    (0 until content.length())
+                        .map { content.getJSONObject(it) }
+                        .filter { it.optString("type") == "text" }
+                        .joinToString("") { it.getString("text") }
+                }
+                DictEntry.parseAiJson(text, word.trim())
             }
         }
 

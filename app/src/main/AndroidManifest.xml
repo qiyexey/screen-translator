@@ -28,6 +28,16 @@
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!--
+      v1.29.0：自动恢复无障碍。普通安装拿不到这个权限，只能由用户用 adb 授予一次：
+        adb shell pm grant com.hunter.screentranslator android.permission.WRITE_SECURE_SETTINGS
+      授予后，App 被强行停止、ROM 顺手关掉无障碍时，下次打开 App 会自己写回去（见 AccessibilityRestore）。
+      没授予时声明它也没有任何副作用。
+    -->
+    <uses-permission
+        android:name="android.permission.WRITE_SECURE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+
+    <!--
       v1.9.2 修复：Android 11+ 包可见性过滤（朗读误报"没有语音引擎"的根因）
 
       targetSdk >= 30 时 PackageManager 查询受「包可见性过滤」限制：
@@ -66,6 +76,14 @@
         -->
         <intent>
             <action android:name="android.speech.action.RECOGNIZE_SPEECH" />
+        </intent>
+        <!--
+          v1.29.0：「按 App 设置自动翻译」要列出桌面上的 App 让用户勾选。
+          只查有启动入口的 App（不用 QUERY_ALL_PACKAGES，那个权限上架审核很严）。
+        -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
 
@@ -132,16 +150,19 @@
         <service
             android:name=".service.LiveTranslateService"
             android:exported="false"
-            android:foregroundServiceType="mediaProjection">
-            <property
-                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-                android:value="实时屏幕翻译叠层" />
-        </service>
+            android:foregroundServiceType="mediaProjection" />
 
         <!-- v1.6.0：输入翻译 -->
         <activity
             android:name=".ui.TranslateInputActivity"
-            android:exported="false" />
+            android:exported="true">
+            <!-- v1.29.0：出现在系统分享菜单里，别的 App 分享文字过来直接翻 -->
+            <intent-filter android:label="@string/share_text_label">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
 
         <!-- v1.6.0：语音输入翻译 -->
         <activity
@@ -152,9 +173,16 @@
         <!-- v1.8.0：图片翻译（按需申请 MediaProjection 授权，抓一帧后立即释放） -->
         <activity
             android:name=".ui.ImageTranslateActivity"
-            android:exported="false"
+            android:exported="true"
             android:label="@string/activity_image_translate"
-            android:excludeFromRecents="true" />
+            android:excludeFromRecents="true">
+            <!-- v1.29.0：分享图片过来直接走图片翻译（与「从相册选图」同一条路） -->
+            <intent-filter android:label="@string/share_image_label">
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+            </intent-filter>
+        </activity>
 
         <!-- v1.15.0：实时屏幕翻译控制页 -->
         <activity
@@ -188,6 +216,43 @@
             android:name=".ui.TriggerSettingsActivity"
             android:exported="false"
             android:label="@string/activity_trigger_settings" />
+        <activity
+            android:name=".ui.AppFilterActivity"
+            android:exported="false"
+            android:label="@string/app_filter_title" />
+        <activity
+            android:name=".ui.GlossaryActivity"
+            android:exported="false"
+            android:label="@string/glossary_title"
+            android:windowSoftInputMode="adjustResize" />
+
+        <!-- v1.29.0：快捷设置磁贴（下拉通知栏一键开关） -->
+        <service
+            android:name=".service.BallTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_tile_ball"
+            android:label="@string/tile_ball_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="true" />
+        </service>
+        <service
+            android:name=".service.FullscreenTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_translate"
+            android:label="@string/tile_fullscreen_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.TOGGLEABLE_TILE"
+                android:value="true" />
+        </service>
         <activity
             android:name=".ui.TtsSettingsActivity"
             android:exported="false"

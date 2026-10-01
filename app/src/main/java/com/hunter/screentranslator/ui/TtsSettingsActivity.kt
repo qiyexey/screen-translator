@@ -62,7 +62,7 @@ class TtsSettingsActivity : BaseActivity() {
             applyTtsSourceLangVisibility()
         }
 
-        // ---- 原文语言：自动 + 8 种目标语言（译文语言就是「目标语言」，不在此列）----
+        // ---- 原文语言：自动 + 全部目标语言（译文语言就是「目标语言」，不在此列）----
         val srcValues = listOf("auto") + LANG_DISPLAY.keys.toList()
         val srcLabels = listOf("自动判断（推荐）") +
                 LANG_DISPLAY.map { "${it.value} (${it.key})" }

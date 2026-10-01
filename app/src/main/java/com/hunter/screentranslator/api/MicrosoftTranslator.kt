@@ -86,9 +86,10 @@ class MicrosoftTranslator(
             }
         }
 
-    /** 微软语言代码：中文用 zh-Hans，其余直接代码 */
+    /** 微软语言代码：中文用 zh-Hans / zh-Hant，其余直接代码 */
     private fun msLangCode(code: String): String = when (code) {
         "zh" -> "zh-Hans"
+        "zh-TW" -> "zh-Hant"
         else -> code
     }
 }

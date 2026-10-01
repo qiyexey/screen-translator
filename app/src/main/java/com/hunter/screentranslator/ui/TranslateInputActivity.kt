@@ -1,5 +1,6 @@
 package com.hunter.screentranslator.ui
 
+import android.content.Intent
 import android.os.Bundle
 import android.text.Editable
 import android.text.TextWatcher
@@ -66,7 +67,19 @@ class TranslateInputActivity : AppCompatActivity() {
                 }
             }
         })
+
+        // v1.29.0：从别的 App「分享 → 翻译」进来时，把分享的文字填进输入框（随即自动翻译）
+        sharedText(intent)?.let { b.etInput.setText(it) }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        sharedText(intent)?.let { b.etInput.setText(it) }
+    }
+
+    private fun sharedText(intent: Intent?): String? =
+        intent?.takeIf { it.action == Intent.ACTION_SEND }
+            ?.getCharSequenceExtra(Intent.EXTRA_TEXT)?.toString()?.trim()?.takeIf { it.isNotEmpty() }
 
     private suspend fun doTranslate(text: String) {
         runOnUiThread { b.tvResult.text = getString(R.string.common_t11) }

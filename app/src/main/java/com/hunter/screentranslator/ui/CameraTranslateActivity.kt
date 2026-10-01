@@ -408,7 +408,8 @@ class CameraTranslateActivity : AppCompatActivity() {
             // 返回值里的 boundingBox 是**输入图坐标系**的（ML Kit 内部缩放会自己换算回来），
             // 输入的就是冻结帧本身，所以框可以直接当屏幕贴片的位置用。
             val scanned = withContext(Dispatchers.Default) {
-                OcrEngine.recognize(frame)
+                // v1.29.0：按源语言挑识别模型；「自动」沿用此前的中文模型
+                OcrEngine.recognizeFor(frame, App.prefs.sourceLang, OcrEngine.Script.CHINESE)
             }
             ovEngine.setLines(scanned)
             progress.visibility = View.GONE

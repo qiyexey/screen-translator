@@ -110,7 +110,7 @@ class BaiduTranslator(
         /**
          * 内部语言码 → 百度语言码。
          * 百度与通用代码不同的：日语 jp、韩语 kor、法语 fra、西班牙语 spa。
-         * 覆盖 LANG_DISPLAY 中的全部 8 种目标语言。
+         * 覆盖 LANG_DISPLAY 中的全部 13 种目标语言（v1.29.0 补了繁中 cht / 越 vie / 泰 th / 印尼 id / 阿 ara）。
          */
         private val BAIDU_LANG = mapOf(
             "zh" to "zh",
@@ -120,7 +120,12 @@ class BaiduTranslator(
             "fr" to "fra",
             "de" to "de",
             "es" to "spa",
-            "ru" to "ru"
+            "ru" to "ru",
+            "zh-TW" to "cht",
+            "vi" to "vie",
+            "th" to "th",
+            "id" to "id",
+            "ar" to "ara"
         )
     }
 }

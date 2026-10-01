@@ -44,7 +44,7 @@ import java.util.concurrent.TimeUnit
 class BingWebTranslator(
     private val translatorPage: String = "https://www.bing.com/translator",
     private val client: OkHttpClient = newClient()
-) : Translator {
+) : Translator, DictionaryLookup {
 
     private data class Session(
         val pageUrl: HttpUrl,
@@ -78,19 +78,31 @@ class BingWebTranslator(
         }
 
     /** A page token and its cookies must be used on the same final host after redirects. */
+    private fun requestOnce(text: String, to: String, from: String): String =
+        withSession(TRANSLATE_PATH, text, to, from) { raw ->
+            val arr = JSONArray(raw)
+            val tr = arr.getJSONObject(0).getJSONArray("translations").getJSONObject(0).getString("text")
+            if (tr.isBlank()) throw RuntimeException("必应返回空译文")
+            tr
+        }
+
+    /**
+     * 带会话地 POST 一次；失败就重建会话再试一次（token 过期是最常见的失败）。
+     * v1.29.0 起翻译与查词共用这一套。
+     */
     @Synchronized
-    private fun requestOnce(text: String, to: String, from: String): String {
+    private fun <T> withSession(path: String, text: String, to: String, from: String, parse: (String) -> T): T {
         val now = System.currentTimeMillis()
         val s = session?.takeIf { now - it.at in 0 until SESSION_TTL_MS }
             ?: bootstrap().also { session = it }
         return try {
-            post(text, to, from, s)
+            parse(post(path, text, to, from, s))
         } catch (e: Exception) {
             session = null
             val fresh = bootstrap()
             session = fresh
             try {
-                post(text, to, from, fresh)
+                parse(post(path, text, to, from, fresh))
             } catch (e2: Exception) {
                 throw RuntimeException("必应网页端失败：${e2.message ?: e2.javaClass.simpleName}", e2)
             }
@@ -117,7 +129,7 @@ class BingWebTranslator(
         return Session(pageUrl, ig, iid, m.groupValues[1], m.groupValues[2], System.currentTimeMillis())
     }
 
-    private fun post(text: String, to: String, from: String, s: Session): String {
+    private fun post(path: String, text: String, to: String, from: String, s: Session): String {
         val body = FormBody.Builder()
             .add("fromLang", from)
             .add("text", text)
@@ -128,7 +140,7 @@ class BingWebTranslator(
         val origin = s.pageUrl.newBuilder().encodedPath("/").query(null).fragment(null)
             .build().toString().removeSuffix("/")
         val url = s.pageUrl.newBuilder()
-            .encodedPath("/ttranslatev3")
+            .encodedPath(path)
             .query(null)
             .addQueryParameter("isVertical", "1")
             .addQueryParameter("IG", s.ig)
@@ -148,15 +160,66 @@ class BingWebTranslator(
             if (t.isBlank()) throw RuntimeException("必应返回空响应（HTTP ${r.code}，请稍后重试）")
             t
         }
-        val arr = JSONArray(raw)
-        val tr = arr.getJSONObject(0).getJSONArray("translations").getJSONObject(0).getString("text")
-        if (tr.isBlank()) throw RuntimeException("必应返回空译文")
-        return tr
+        return raw
+    }
+
+    /**
+     * 查词（v1.29.0）：必应网页端的词典接口 /tlookupv3，与翻译同一套会话。
+     *
+     * 返回 `[{"translations":[{"displayTarget":"苹果","posTag":"NOUN",...}]}]`，
+     * 按词性分组即可。它**不给音标**，所以 [DictEntry.phonetic] 恒为空。
+     * 词典接口要求明确的源语言（不接受 auto-detect）：源语言是「自动」时，
+     * 纯 ASCII 单词按英文查，其它情况返回失败，由调用方改走普通翻译。
+     */
+    override suspend fun lookup(word: String, targetLang: String, sourceLang: String): Result<DictEntry> =
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val from = when {
+                    sourceLang != SOURCE_AUTO -> bingLang(sourceLang)
+                    word.all { it.code < 128 } -> "en"
+                    else -> throw UnsupportedOperationException("源语言自动识别时，必应词典只查英文单词")
+                }
+                val to = bingLang(targetLang)
+                if (from == to) throw UnsupportedOperationException("源语言与目标语言相同")
+                withSession(LOOKUP_PATH, word.trim(), to, from) { raw ->
+                    val list = JSONArray(raw).getJSONObject(0).getJSONArray("translations")
+                    val byPos = LinkedHashMap<String, MutableList<String>>()
+                    for (i in 0 until list.length()) {
+                        val t = list.getJSONObject(i)
+                        val pos = posLabel(t.optString("posTag"))
+                        val meaning = t.optString("displayTarget").trim()
+                        if (meaning.isEmpty()) continue
+                        val bucket = byPos.getOrPut(pos) { ArrayList() }
+                        if (bucket.size < DictEntry.MAX_MEANINGS && meaning !in bucket) bucket += meaning
+                    }
+                    if (byPos.isEmpty()) throw RuntimeException("必应词典没有收录这个词")
+                    DictEntry(
+                        word = word.trim(),
+                        phonetic = null,
+                        senses = byPos.entries.take(DictEntry.MAX_SENSES).map { DictSense(it.key, it.value) }
+                    )
+                }
+            }
+        }
+
+    /** 必应的 posTag → 常见词性缩写 */
+    private fun posLabel(tag: String): String = when (tag.uppercase()) {
+        "NOUN" -> "n."
+        "VERB" -> "v."
+        "ADJ" -> "adj."
+        "ADV" -> "adv."
+        "PRON" -> "pron."
+        "PREP" -> "prep."
+        "CONJ" -> "conj."
+        "DET" -> "det."
+        "MODAL" -> "modal"
+        else -> "其他"
     }
 
     /** App 内部语言码 → 必应语言码（中文必须带脚本后缀，否则可能返回繁体） */
     private fun bingLang(lang: String): String = when (lang) {
         "zh" -> "zh-Hans"
+        "zh-TW" -> "zh-Hant"
         "en" -> "en"
         "ja" -> "ja"
         "ko" -> "ko"
@@ -199,6 +262,8 @@ class BingWebTranslator(
         private const val CHUNK = 900
         private const val SESSION_TTL_MS = 5 * 60 * 1000L
         private const val AUTO_DETECT = "auto-detect"
+        private const val TRANSLATE_PATH = "/ttranslatev3"
+        private const val LOOKUP_PATH = "/tlookupv3"
 
         private fun newClient(): OkHttpClient = OkHttpClient.Builder()
             .cookieJar(object : CookieJar {

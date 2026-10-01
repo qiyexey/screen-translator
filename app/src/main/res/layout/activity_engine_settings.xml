@@ -906,6 +906,48 @@
                         android:layout_height="wrap_content"
                         android:inputType="none" />
                 </com.google.android.material.textfield.TextInputLayout>
+
+                <!-- v1.29.0：备用引擎 -->
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/engine_fallback_title"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textSize="13sp" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.ScreenTranslator.DropdownLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/spinnerFallback"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:inputType="none" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/tvFallbackHint"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:text="@string/engine_fallback_hint"
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:textSize="12sp" />
+
+                <!-- v1.29.0：术语表入口 -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnGlossary"
+                    style="@style/Widget.ScreenTranslator.Button.Outlined"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="12dp"
+                    android:text="@string/glossary_title"
+                    android:textColor="?attr/colorPrimary"
+                    android:textSize="13sp" />
         <com.google.android.material.button.MaterialButton
             android:id="@+id/btnSave"
             style="@style/Widget.ScreenTranslator.Button.Filled"

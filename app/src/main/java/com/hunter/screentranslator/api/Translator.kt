@@ -139,9 +139,16 @@ enum class TranslationEngine(
     val keyless: Boolean
         get() = this == BING_WEB || this == HYMT_LOCAL
 
+    /**
+     * 能否查词（v1.29.0 单词查词模式）：AI 引擎让模型直接给释义，必应走它的词典接口。
+     * 传统机翻 API 和本地模型只会给一个译文，查词时照常翻译。
+     */
+    val supportsDictionary: Boolean
+        get() = this in setOf(DEEPSEEK, OPENAI, CLAUDE, QWEN, GLM, DOUBAO, BING_WEB)
+
     companion object {
         fun fromKey(key: String): TranslationEngine =
-            entries.firstOrNull { it.key == key } ?: DEEPSEEK
+            entries.firstOrNull { it.key == key } ?: BING_WEB
     }
 }
 
@@ -229,14 +236,24 @@ fun engineReadiness(
 /**
  * 目标语言显示名映射（通用）
  * 各引擎语言代码有差异，由各 Translator 内部转换。
+ *
+ * v1.29.0 新增繁体中文 / 越南语 / 泰语 / 印尼语 / 阿拉伯语。
+ * 繁体中文的内部码用 `zh-TW`（而不是 zh-Hant）：Google 直接认这个码，
+ * 其它引擎各自在映射表里转换。"zh" 的显示名相应改成「简体中文」，免得两项看着一样。
+ * 显示名同时会进 AI 引擎的提示词（"翻译成【xxx】"），所以用各语言的自称。
  */
 val LANG_DISPLAY = linkedMapOf(
-    "zh" to "中文",
+    "zh" to "简体中文",
+    "zh-TW" to "繁體中文",
     "en" to "English",
     "ja" to "日本語",
     "ko" to "한국어",
     "fr" to "Français",
     "de" to "Deutsch",
     "es" to "Español",
-    "ru" to "Русский"
+    "ru" to "Русский",
+    "vi" to "Tiếng Việt",
+    "th" to "ไทย",
+    "id" to "Bahasa Indonesia",
+    "ar" to "العربية"
 )
