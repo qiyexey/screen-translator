@@ -11,6 +11,9 @@ import com.hunter.screentranslator.util.CrashLog
 import com.hunter.screentranslator.util.HistoryStore
 import com.hunter.screentranslator.util.Prefs
 import com.hunter.screentranslator.util.TranslationCache
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 
 class App : Application() {
     override fun onCreate() {
@@ -104,6 +107,12 @@ class App : Application() {
         @Volatile
         lateinit var prefs: Prefs
             private set
+
+        /**
+         * 进程级协程作用域：给"Activity 立刻 finish、活还没干完"的入口用（如菜单划词）。
+         * lifecycleScope 会在 onDestroy 时取消，网络请求回来时结果就被丢了。
+         */
+        val appScope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
 
         /** Application Context 快捷访问（TTS 等单例需要它做引擎探测） */
         val appContext: android.content.Context

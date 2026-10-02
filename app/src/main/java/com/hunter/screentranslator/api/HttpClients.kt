@@ -30,6 +30,10 @@ object HttpClients {
             // 不加 callTimeout 时一个慢速滴流的响应可以无限期挂着。
             .callTimeout(45, TimeUnit.SECONDS)
             .retryOnConnectionFailure(true)
+            // 手机切换 Wi-Fi/4G 后，连接池里的 HTTP/2 连接可能已经"死"了但没被关闭，
+            // 复用它发请求会一直等到 read/call 超时，只报一个光秃秃的 "timeout"。
+            // 定时 ping 能及早发现死连接并把它踢出连接池。
+            .pingInterval(15, TimeUnit.SECONDS)
             .build()
     }
 

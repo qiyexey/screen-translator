@@ -603,6 +603,7 @@ class EngineSettingsActivity : BaseActivity() {
         b.btnTestTranslate.text = getString(R.string.engine_settings_t45)
 
         lifecycleScope.launch {
+            val startedAt = System.currentTimeMillis()
             // v1.20.0：这句测试文案是英文，所以源语言**刻意传 auto 而不是 App.prefs.sourceLang**。
             // 用户若把源语言设成"日语"，用它去测英文样例会得到一个明显错误的结果，
             // 从而误判"这个引擎坏了"。测试翻译的目的是验证密钥/网络连通性，
@@ -635,7 +636,15 @@ class EngineSettingsActivity : BaseActivity() {
                         .show()
                 },
                 onFailure = { e ->
-                    val guidance = if (engine == TranslationEngine.BING_WEB) {
+                    val elapsedSec = (System.currentTimeMillis() - startedAt) / 1000
+                    // OkHttp 的超时只报 "timeout"，用户分不清是连不上还是服务端太慢
+                    val isTimeout = e is java.io.InterruptedIOException
+                    val guidance = if (isTimeout) {
+                        "请求等了 ${elapsedSec} 秒没有拿到响应。\n" +
+                            "1. 服务端繁忙或模型响应慢：稍后再试\n" +
+                            "2. 网络不稳：切换 Wi-Fi/移动数据后重试\n" +
+                            "3. 若用了代理/中转，检查 Base URL 能否从手机访问"
+                    } else if (engine == TranslationEngine.BING_WEB) {
                         "必应网页版无需密钥。请检查网络连接；若持续失败，网页接口可能已变更。"
                     } else {
                         "请检查：\n1. 密钥是否正确\n2. 账户额度/余额\n3. 手机能否访问该服务"
@@ -643,7 +652,8 @@ class EngineSettingsActivity : BaseActivity() {
                     AlertDialog.Builder(this@EngineSettingsActivity)
                         .setTitle("❌ 测试失败（$engineName）")
                         .setMessage(
-                            "${e.message}\n\n$guidance"
+                            (if (isTimeout) "请求超时（${e.message}）" else "${e.message}") +
+                                "\n\n$guidance"
                         )
                         .setPositiveButton("好的", null)
                         .show()

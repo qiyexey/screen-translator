@@ -4,7 +4,6 @@ import android.content.Intent
 import android.os.Bundle
 import android.util.Log
 import androidx.appcompat.app.AppCompatActivity
-import androidx.lifecycle.lifecycleScope
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.api.TranslatorFactory
 import com.hunter.screentranslator.service.OverlayService
@@ -35,7 +34,9 @@ class ProcessTextActivity : AppCompatActivity() {
         // 拉起悬浮窗服务，然后异步翻译（本 Activity 立即结束，不打断用户）
         runCatching { OverlayService.start(this) }
 
-        lifecycleScope.launch {
+        // 不能用 lifecycleScope：下面立即 finish()，onDestroy 会把它取消，
+        // 网络请求一挂起协程就被取消，面板永远停在"正在翻译…"
+        App.appScope.launch {
             // v1.29.0：选中单个单词时先查词
             if (WordLookup.tryShow(text, "[菜单划词]")) return@launch
             OverlayService.update(text.take(300), "正在翻译…")
