@@ -14,6 +14,7 @@ import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
 import android.view.WindowManager
+import com.hunter.screentranslator.App
 
 /**
  * 框选翻译遮罩（v1.5.0）：
@@ -73,6 +74,15 @@ class RegionSelectView(
         textSize = dpF(13f)
         isAntiAlias = true
     }
+    /** 「覆盖原文」开着时切换按钮用强调色，一眼看出当前模式 */
+    private val modeOnPaint = Paint().apply {
+        color = Color.parseColor("#E61E88E5")
+        style = Paint.Style.FILL
+        isAntiAlias = true
+    }
+    private val modeRect = RectF()
+    private var downOnMode = false
+
     private val sizeTextPaint = Paint().apply {
         color = Color.WHITE
         textSize = dpF(11f)
@@ -102,6 +112,15 @@ class RegionSelectView(
         canvas.drawRoundRect(tipRect, tipH / 2, tipH / 2, tipBgPaint)
         val tipY = tipTop + tipH / 2 - (tipTextPaint.descent() + tipTextPaint.ascent()) / 2
         canvas.drawText(tip, w / 2 - tipTextPaint.measureText(tip) / 2, tipY, tipTextPaint)
+
+        // ===== 呈现方式切换（v1.29.2）：点一下在「面板」与「覆盖原文」之间切 =====
+        val mode = if (App.prefs.regionCover) "译文：覆盖原文  ⇄" else "译文：显示在面板  ⇄"
+        val modeW = tipTextPaint.measureText(mode) + dpF(32f)
+        val modeTop = tipTop + tipH + dpF(10f)
+        modeRect.set((w - modeW) / 2, modeTop, (w + modeW) / 2, modeTop + tipH)
+        canvas.drawRoundRect(modeRect, tipH / 2, tipH / 2, if (App.prefs.regionCover) modeOnPaint else tipBgPaint)
+        val modeY = modeTop + tipH / 2 - (tipTextPaint.descent() + tipTextPaint.ascent()) / 2
+        canvas.drawText(mode, w / 2 - tipTextPaint.measureText(mode) / 2, modeY, tipTextPaint)
 
         if (!dragging) return
 
@@ -135,7 +154,7 @@ class RegionSelectView(
         // ===== 尺寸提示（选区上方，放不下就放选区内顶部） =====
         val sizeText = "${(r - l).toInt()} × ${(b - t).toInt()}"
         var sy = t - dpF(10f)
-        if (sy < tipTop + tipH + dpF(8f)) sy = t + dpF(18f)
+        if (sy < modeRect.bottom + dpF(8f)) sy = t + dpF(18f)
         canvas.drawText(sizeText, (l + r) / 2, sy, sizeTextPaint)
     }
 
@@ -143,6 +162,7 @@ class RegionSelectView(
     override fun onTouchEvent(e: MotionEvent): Boolean {
         when (e.action) {
             MotionEvent.ACTION_DOWN -> {
+                downOnMode = modeRect.contains(e.x, e.y)
                 startX = e.x
                 startY = e.y
                 endX = e.x
@@ -158,6 +178,12 @@ class RegionSelectView(
                 invalidate()
             }
             MotionEvent.ACTION_UP -> {
+                if (!dragging && downOnMode) {
+                    // 点的是切换按钮：只切模式，不退出框选
+                    App.prefs.regionCover = !App.prefs.regionCover
+                    invalidate()
+                    return true
+                }
                 if (!dragging) {
                     performClick()
                     onDismiss()  // 单击空白：取消框选

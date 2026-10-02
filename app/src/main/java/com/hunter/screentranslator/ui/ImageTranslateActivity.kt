@@ -1,6 +1,5 @@
 package com.hunter.screentranslator.ui
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
@@ -8,11 +7,8 @@ import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Rect
 import android.net.Uri
-import android.media.projection.MediaProjection
-import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
-import android.util.Log
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -39,7 +35,6 @@ import com.hunter.screentranslator.util.LineOverlayEngine
 import com.hunter.screentranslator.util.OcrEngine
 import com.hunter.screentranslator.util.HistoryStore
 import com.hunter.screentranslator.util.PeekLineLayer
-import com.hunter.screentranslator.util.ScreenCapture
 import com.hunter.screentranslator.util.Speaker
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -61,9 +56,8 @@ import java.io.ByteArrayOutputStream
  *      （[ActivityResultContracts.PickVisualMedia]）。选它有三个好处 ——
  *      **不需要任何存储权限**（系统代选，App 只拿到用户挑中的那一张）、
  *      界面是用户熟悉的系统相册、且适配 Android 14 的"部分照片访问"。
- *   2. **截取屏幕**：保留原来的 MediaProjection 链路，用于"翻译正在看的页面"。
- *
- * 进页**不再自动弹授权**（那会打断只想选图的人），由用户点按钮决定走哪条。
+ *   2. ~~截取屏幕~~：v1.29.2 去掉。授权框关闭后前台就是本页，截到的只是自己；
+ *      "翻译正在看的页面"由悬浮球框选 / 全屏翻译 / 实时翻译负责。
  *
  * ## v1.25.0：译文默认**原位覆盖**在原文上（两种模式可切换）
  *
@@ -77,7 +71,7 @@ import java.io.ByteArrayOutputStream
  *   - 选图后**自动整屏逐行贴合**，看到的就是译文；
  *   - 点图上某一行 → 只翻那一行（其余行不动）；
  *   - **按住屏幕** → 所有贴片隐藏、露出原文，松手恢复；
- *   - 底部「📄 全文」→ 一次整段翻译（带上下文、译文更连贯），结果在下方的卡片里。
+ *   - v1.29.2 去掉了「全文翻译」按钮：选图即自动逐行贴合，它是重复的。
  *
  * 两种模式（[MODE_OVERLAY] / [MODE_REGION]）用顶部开关切换，选择记忆到偏好里：
  *
@@ -103,9 +97,7 @@ class ImageTranslateActivity : AppCompatActivity() {
     private lateinit var tvSource: TextView
     private lateinit var progress: ProgressBar
     private lateinit var btnSpeak: MaterialButton
-    private lateinit var btnFull: MaterialButton
     private lateinit var btnPickGallery: MaterialButton
-    private lateinit var btnCapture: MaterialButton
     private lateinit var btnMode: MaterialButton
     private lateinit var resultBox: LinearLayout
 
@@ -181,7 +173,7 @@ class ImageTranslateActivity : AppCompatActivity() {
 
             override fun onSourceReady(text: String) {
                 // 原位覆盖模式下不往文本框塞原文（占地方且没必要）；
-                // 整段翻译时由 translateWhole() 自己取 sourceText。
+                // （v1.29.2 起本页不再需要整段原文）
             }
 
             override fun onStatus(text: String) {
@@ -194,7 +186,6 @@ class ImageTranslateActivity : AppCompatActivity() {
 
             override fun onBusy(busy: Boolean) {
                 btnPickGallery.isEnabled = !busy
-                btnFull.isEnabled = !busy
             }
 
             override fun onBatchDone(okCount: Int, total: Int, failed: Int) {
@@ -314,7 +305,7 @@ class ImageTranslateActivity : AppCompatActivity() {
         }
         root.addView(progress)
 
-        // 结果区（框选模式 / 「📄 全文」整段翻译用）
+        // 结果区（框选模式用）
         val resultScroll = ScrollView(this).apply {
             layoutParams = LinearLayout.LayoutParams(-1, 0, 0.4f).apply { topMargin = dp(12) }
             background = ContextCompat.getDrawable(this@ImageTranslateActivity, R.drawable.bg_translation_panel)
@@ -338,10 +329,10 @@ class ImageTranslateActivity : AppCompatActivity() {
         resultScroll.addView(resultBox)
         root.addView(resultScroll)
 
-        // v1.25.0：来源按钮行拆成两行 —— 第一行是"选图/截图"（来源），
-        // 第二行是"重翻/朗读"（对已选图片的操作）。
-        // 原来三者挤一行，加了"从相册选择"后会变成四个等宽按钮，
-        // 窄屏上文字会被截断。
+        // v1.29.2：底部只剩一行「从相册选择 / 朗读译文」。
+        //  - 去掉「截取屏幕」：授权框一关前台就是本页，截到的只是自己；
+        //    翻别的 App 的画面请用悬浮球框选 / 全屏翻译 / 实时翻译。
+        //  - 去掉「全文翻译 / 翻译整张图」：选图后已自动逐行覆盖，框选模式拖框即翻，按钮是重复的。
         val srcRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }
@@ -359,30 +350,6 @@ class ImageTranslateActivity : AppCompatActivity() {
                     PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                 )
             }
-        }
-        btnCapture = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-            text = getString(R.string.image_translate_btn_capture)
-            minHeight = dp(48)
-            icon = ContextCompat.getDrawable(this@ImageTranslateActivity, R.drawable.ic_camera)
-            iconSize = dp(18)
-            iconPadding = dp(6)
-            setOnClickListener { requestCapture() }
-        }
-        srcRow.addView(btnPickGallery, LinearLayout.LayoutParams(0, -2, 1f))
-        srcRow.addView(btnCapture, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
-        root.addView(srcRow)
-
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }
-        }
-        btnFull = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
-            text = getString(R.string.image_translate_btn_full)
-            minHeight = dp(48)
-            icon = ContextCompat.getDrawable(this@ImageTranslateActivity, R.drawable.ic_translate)
-            iconSize = dp(18)
-            iconPadding = dp(6)
-            setOnClickListener { onFullClick() }
         }
         btnSpeak = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
             text = getString(R.string.image_translate_btn_speak)
@@ -402,9 +369,9 @@ class ImageTranslateActivity : AppCompatActivity() {
                 }
             }
         }
-        row.addView(btnFull, LinearLayout.LayoutParams(0, -2, 1f))
-        row.addView(btnSpeak, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
-        root.addView(row)
+        srcRow.addView(btnPickGallery, LinearLayout.LayoutParams(0, -2, 1f))
+        srcRow.addView(btnSpeak, LinearLayout.LayoutParams(0, -2, 1f).apply { marginStart = dp(8) })
+        root.addView(srcRow)
 
         return root
     }
@@ -416,10 +383,6 @@ class ImageTranslateActivity : AppCompatActivity() {
             getString(R.string.image_translate_mode_overlay)
         else
             getString(R.string.image_translate_mode_region)
-        btnFull.text = if (mode == MODE_OVERLAY)
-            getString(R.string.image_translate_btn_whole)
-        else
-            getString(R.string.image_translate_btn_full)
         val overlay = mode == MODE_OVERLAY
         // 框选遮罩只在框选模式下工作：原位覆盖模式里点一下是"翻这一行"，
         // 拖动不应该画出一个选框来（那会让人以为还能框选）。
@@ -470,56 +433,6 @@ class ImageTranslateActivity : AppCompatActivity() {
         }
     }
 
-    // ==================== 截图授权（按需）====================
-
-    private fun requestCapture() {
-        // v1.15.22：不再因为"引擎读不了图"就拦下来。
-        // 读不了图时会在下面自动改走「本机 OCR + 文本翻译」——
-        // 配免密钥的必应网页端就是一条完全免费的图片翻译链路。
-        tvStatus.text = getString(R.string.image_translate_t07)
-        val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        startActivityForResult(mpm.createScreenCaptureIntent(), REQ_PROJECTION)
-    }
-
-    @Deprecated("startActivityForResult 简单直接，图片翻译无需 Result API 的额外复杂度")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        super.onActivityResult(requestCode, resultCode, data)
-        if (requestCode != REQ_PROJECTION) return
-        if (resultCode != Activity.RESULT_OK || data == null) {
-            tvStatus.text = getString(R.string.image_translate_t04)
-            return
-        }
-        tvStatus.text = getString(R.string.image_translate_t06)
-        val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
-        lifecycleScope.launch {
-            val bmp = withContext(Dispatchers.IO) {
-                var mp: MediaProjection? = null
-                try {
-                    mp = mpm.getMediaProjection(resultCode, data)
-                    if (mp == null) {
-                        Log.e(TAG, "getMediaProjection 返回 null")
-                        null
-                    } else {
-                        ScreenCapture.captureOnce(this@ImageTranslateActivity, mp)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "截图异常: $e")
-                    null
-                } finally {
-                    // 关键：抓完立刻释放投影，不常驻、不持续耗电
-                    runCatching { mp?.stop() }
-                }
-            }
-            if (bmp == null) {
-                tvStatus.text = getString(R.string.image_translate_t03)
-                return@launch
-            }
-            showBitmap(bmp)
-            tvStatus.text = getString(R.string.image_translate_t02)
-            if (mode == MODE_OVERLAY) autoTranslateOverlay()
-        }
-    }
-
     // ==================== 原位覆盖模式（v1.25.0）====================
 
     /**
@@ -556,68 +469,6 @@ class ImageTranslateActivity : AppCompatActivity() {
         }
     }
 
-    /** 「📄 全文 / 翻译整张图」按钮：两种模式下含义不同 */
-    private fun onFullClick() {
-        if (mode == MODE_OVERLAY) translateWhole() else screenshot?.let { translateBitmap(it, "整图") }
-    }
-
-    /**
-     * 原位覆盖模式下的「📄 全文」：把 OCR 出的整屏原文一次性发给引擎。
-     * 逐行贴合是"位置对得上"，整段翻译是"上下文连贯"，两者各有所长，都留着。
-     */
-    private fun translateWhole() {
-        val text = ovEngine.sourceText
-        if (text.isBlank()) {
-            // 还没识别（例如用户没选图 / 识别失败）→ 提示而不是静默失败
-            screenshot?.let { translateBitmap(it, "整图") } ?: run {
-                toast(getString(R.string.image_translate_t27))
-            }
-            return
-        }
-        if (translating) {
-            toast(getString(R.string.image_translate_t08))
-            return
-        }
-        translating = true
-        progress.visibility = View.VISIBLE
-        tvStatus.text = getString(R.string.image_translate_t28)
-        resultBox.visibility = View.VISIBLE
-        tvSource.visibility = View.GONE
-        tvResult.text = ""
-
-        lifecycleScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                TranslatorFactory.current().translate(text, App.prefs.targetLang, App.prefs.sourceLang)
-            }
-            translating = false
-            progress.visibility = View.GONE
-            result.fold(
-                onSuccess = { out ->
-                    lastTranslated = out
-                    tvResult.text = out
-                    btnSpeak.isEnabled = true
-                    tvStatus.text = getString(R.string.image_translate_t29)
-                    runCatching {
-                        HistoryStore.add(
-                            source = text,
-                            translated = out,
-                            mode = "🖼 图片(全文)",
-                            targetLang = App.prefs.targetLang,
-                            engine = App.prefs.engine
-                        )
-                    }
-                    if (App.prefs.ttsAutoSpeak && out.isNotBlank()) {
-                        Speaker.speakContent(this@ImageTranslateActivity, text, out)
-                    }
-                },
-                onFailure = { e ->
-                    tvResult.text = ""
-                    tvStatus.text = "翻译失败：${e.message}"
-                }
-            )
-        }
-    }
-
     /** 原位覆盖模式下的写历史：逐行译文按阅读顺序拼回一条，避免一张图刷出几十条 */
     private fun recordHistory(okCount: Int) {
         if (okCount <= 0) return
@@ -626,6 +477,9 @@ class ImageTranslateActivity : AppCompatActivity() {
         val dst = ovEngine.lines.indices.filter { ovEngine.translations.containsKey(it) }
             .joinToString("\n") { ovEngine.translations[it] ?: "" }
         if (dst.isBlank()) return
+        // v1.29.2：覆盖模式的译文也交给「朗读译文」（原来只有框选会启用它，覆盖模式下一直是灰的）
+        lastTranslated = dst
+        btnSpeak.isEnabled = true
         runCatching {
             HistoryStore.add(
                 source = src,
@@ -766,7 +620,6 @@ class ImageTranslateActivity : AppCompatActivity() {
     }.getOrNull()
 
     override fun onDestroy() {
-        // 投影已在抓帧后立刻 stop（见 onActivityResult），这里无需再处理
         ovEngine.setFrame(null)
         screenshot?.recycle()
         screenshot = null
@@ -932,8 +785,6 @@ class ImageTranslateActivity : AppCompatActivity() {
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     companion object {
-        private const val TAG = "ScreenTranslator"
-        private const val REQ_PROJECTION = 1001
 
         /** 原位覆盖：译文盖在原文上（默认） */
         const val MODE_OVERLAY = "overlay"

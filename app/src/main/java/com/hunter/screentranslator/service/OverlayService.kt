@@ -16,6 +16,7 @@ import androidx.core.app.NotificationCompat
 import com.hunter.screentranslator.App
 import com.hunter.screentranslator.overlay.OverlayBallView
 import com.hunter.screentranslator.overlay.OverlayView
+import com.hunter.screentranslator.overlay.RegionCoverView
 import com.hunter.screentranslator.overlay.RegionSelectView
 import com.hunter.screentranslator.util.Speaker
 
@@ -88,7 +89,7 @@ class OverlayService : Service() {
                     }
                 },
                 onBallTripleClick = {
-                    // 三击球（v1.8.0）：打开图片翻译（内部会按需申请截图授权）
+                    // 三击球（v1.8.0）：打开图片翻译（v1.29.2 起只从相册选图）
                     runCatching {
                         startActivity(
                             android.content.Intent(this, com.hunter.screentranslator.ui.ImageTranslateActivity::class.java)
@@ -116,6 +117,7 @@ class OverlayService : Service() {
     /** 双击悬浮球进入：全屏遮罩，拖出矩形翻译，单击取消 */
     private fun startRegionSelect() {
         if (regionSelectView != null) return
+        closeCover()  // 上一次的覆盖层还在就先收掉，免得盖住新要框的内容
         runCatching {
             // 先收起面板，避免面板挡住要框选的内容
             overlayView?.visibility = View.GONE
@@ -133,18 +135,40 @@ class OverlayService : Service() {
 
     private fun onRegionPicked(rect: Rect) {
         endRegionSelect()
-        overlayView?.showWithAutoHide()
         val svc = ScreenReaderService.instance
         if (svc == null) {
+            overlayView?.showWithAutoHide()
             update("⚠️ 无障碍服务未开启", "请到 App 里开启无障碍服务后再用框选翻译")
-        } else {
-            svc.translateInRegion(rect)
+            return
         }
+        // v1.29.2：「覆盖原文」模式不弹面板，译文直接盖在原文上（失败时才用面板报错）
+        val cover = App.prefs.regionCover
+        if (!cover) overlayView?.showWithAutoHide()
+        svc.translateInRegion(rect, cover)
     }
 
     private fun endRegionSelect() {
         regionSelectView?.detachFromWindow(windowManager)
         regionSelectView = null
+    }
+
+    // ============================ 框选·覆盖原文（v1.29.2） ============================
+
+    private var coverView: RegionCoverView? = null
+
+    private fun openCover(): RegionCoverView? {
+        closeCover()
+        return runCatching {
+            RegionCoverView(this, onDismiss = { closeCover() })
+                .also { it.attachToWindow(windowManager) }
+        }.onFailure {
+            Log.e(TAG, "覆盖层添加失败: $it")
+        }.getOrNull().also { coverView = it }
+    }
+
+    private fun closeCover() {
+        coverView?.detachFromWindow(windowManager)
+        coverView = null
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -167,6 +191,7 @@ class OverlayService : Service() {
         // v1.8.0：服务销毁时停掉朗读，避免译文读一半服务没了
         runCatching { Speaker.stop() }
         endRegionSelect()
+        closeCover()
         removeBall()
         overlayView?.detachFromWindow(windowManager)
         overlayView = null
@@ -248,6 +273,60 @@ class OverlayService : Service() {
             svc.overlayView?.post {
                 svc.overlayView?.updateContent(source, translated)
             } ?: Log.w(TAG, "翻译面板不存在")
+        }
+
+        /**
+         * v1.29.2 框选截屏：截屏前把自家悬浮球和面板藏起来，免得截进画面盖住原文；
+         * 截完传 false 恢复（球按原规则显示；[showPanel] 时面板带自动隐藏地重新出现，
+         * 覆盖原文模式传 false —— 译文盖在原文上，不需要面板）。
+         */
+        fun setCaptureHidden(hidden: Boolean, showPanel: Boolean = true) {
+            val svc = instance ?: return
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                if (hidden) {
+                    svc.ballView?.visibility = View.GONE
+                    svc.overlayView?.visibility = View.GONE
+                } else {
+                    svc.ballView?.visibility =
+                        if (ownAppForeground || !App.prefs.floatingBall) View.GONE else View.VISIBLE
+                    if (showPanel) svc.overlayView?.showWithAutoHide()
+                }
+            }
+        }
+
+        /**
+         * v1.29.2 框选·覆盖原文：打开覆盖层并画出待翻译的行；之后用 [coverChip] 逐行盖译文。
+         * 服务没在跑（或窗口加不上）时返回 false，调用方改走面板。
+         */
+        fun coverBegin(lines: List<RegionCoverView.Line>): Boolean {
+            val svc = instance ?: return false
+            val latch = java.util.concurrent.CountDownLatch(1)
+            var ok = false
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                ok = svc.openCover()?.also {
+                    it.setLines(lines)
+                    it.setStatus("翻译中…")
+                } != null
+                latch.countDown()
+            }
+            latch.await(2, java.util.concurrent.TimeUnit.SECONDS)
+            return ok
+        }
+
+        fun coverChip(index: Int, translated: String) {
+            val svc = instance ?: return
+            android.os.Handler(android.os.Looper.getMainLooper()).post { svc.coverView?.showChip(index, translated) }
+        }
+
+        /** 覆盖层顶部状态条（翻译完成 / 部分失败），几秒后自动收起 */
+        fun coverStatus(text: String, autoHideMs: Long = 0) {
+            val svc = instance ?: return
+            android.os.Handler(android.os.Looper.getMainLooper()).post { svc.coverView?.setStatus(text, autoHideMs) }
+        }
+
+        fun coverClose() {
+            val svc = instance ?: return
+            android.os.Handler(android.os.Looper.getMainLooper()).post { svc.closeCover() }
         }
 
         /** 显示词典词条（v1.29.0 单词查词模式） */

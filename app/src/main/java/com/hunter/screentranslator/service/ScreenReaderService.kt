@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.graphics.Rect
 import android.os.Build
 import android.provider.Settings
@@ -16,7 +17,9 @@ import com.hunter.screentranslator.App
 import com.hunter.screentranslator.api.Translator
 import com.hunter.screentranslator.api.TranslatorFactory
 import com.hunter.screentranslator.overlay.OverlayView
+import com.hunter.screentranslator.overlay.RegionCoverView
 import com.hunter.screentranslator.util.HistoryStore
+import com.hunter.screentranslator.util.OcrEngine
 import com.hunter.screentranslator.util.ScriptDetector
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,8 +27,15 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.util.concurrent.atomic.AtomicBoolean
+import kotlin.coroutines.resume
 
 /**
  * 无障碍服务。v1.5.0 支持四种翻译模式：
@@ -343,8 +353,14 @@ class ScreenReaderService : AccessibilityService() {
      * 比"相交"干净——不会把只蹭到一条边的侧栏文字卷进来）。
      * 排序规则：按 top 升序、left 升序，还原阅读顺序后逐节点换行拼接。
      */
-    fun translateInRegion(region: Rect) {
-        Log.i(TAG, "[框选] rect=$region")
+    /** 框选里的一行：文字 + 屏幕坐标（覆盖原文模式按它摆译文） */
+    private data class RegionLine(val text: String, val box: Rect)
+
+    /**
+     * [cover] = true 时译文逐行盖在原文位置上（v1.29.2「覆盖原文」），否则照旧显示在面板里。
+     */
+    fun translateInRegion(region: Rect, cover: Boolean = false) {
+        Log.i(TAG, "[框选] rect=$region cover=$cover")
         scope.launch {
             val root = activeRoot()
             if (root == null) {
@@ -352,8 +368,7 @@ class ScreenReaderService : AccessibilityService() {
                 return@launch
             }
 
-            data class Entry(val text: String, val top: Int, val left: Int)
-            val entries = mutableListOf<Entry>()
+            val entries = mutableListOf<RegionLine>()
             val seen = HashSet<String>()  // 父子节点文字重复（WebView 常见）只取一份
             val r = Rect()
 
@@ -365,7 +380,7 @@ class ScreenReaderService : AccessibilityService() {
                     val cx = (r.left + r.right) / 2
                     val cy = (r.top + r.bottom) / 2
                     if (region.contains(cx, cy) && seen.add(t.toString())) {
-                        entries.add(Entry(t.toString().trim(), r.top, r.left))
+                        entries.add(RegionLine(t.toString().trim(), Rect(r)))
                     }
                 }
                 for (i in 0 until node.childCount) {
@@ -374,19 +389,195 @@ class ScreenReaderService : AccessibilityService() {
             }
             dfs(root, 0)
 
-            if (entries.isEmpty()) {
-                Log.d(TAG, "[框选] 选区内没有文字节点")
+            val viaOcr = entries.isEmpty()
+            val canShoot = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+            if (viaOcr && !canShoot) {
+                if (cover) OverlayService.setCaptureHidden(false)
                 OverlayService.update(
                     "📍 框选区域内没有文字",
-                    "这个区域读不到文字节点（画布渲染/图片文字无障碍读不到）\n\n试试框大一点，或把悬浮球直接拖到文字上松手"
+                    "这个区域读不到文字节点，识别图片里的字需要 Android 11 及以上"
                 )
                 return@launch
             }
+            // 覆盖模式要按原文底色选贴片明暗，所以即使读到了节点也截一帧来取样
+            val shot = if ((viaOcr || cover) && canShoot) {
+                // 先把自家悬浮球/面板藏起来，等一帧画面刷新后再截，免得截到自己
+                OverlayService.setCaptureHidden(true)
+                delay(CAPTURE_SETTLE_MS)
+                captureScreen().also { OverlayService.setCaptureHidden(false, showPanel = !cover) }
+            } else null
 
-            entries.sortWith(compareBy({ it.top }, { it.left }))
-            val text = entries.joinToString("\n") { it.text }
-            Log.i(TAG, "[框选] 命中 ${entries.size} 个节点、${text.length} 字符，开始翻译")
-            translateAndShow(text, "[框选]")
+            try {
+                val lines: List<RegionLine> = if (viaOcr) {
+                    // v1.29.2：图片里的字、游戏/画布渲染的字没有文字节点 → 截屏裁出选区走本机 OCR
+                    Log.d(TAG, "[框选] 选区内没有文字节点，改用截屏 OCR")
+                    if (shot == null) {
+                        if (cover) OverlayService.setCaptureHidden(false)
+                        OverlayService.update("⚠️ 截屏失败", "系统没给出画面。若刚升级过 App，请到系统设置里把无障碍服务关掉再打开一次")
+                        return@launch
+                    }
+                    ocrRegion(shot, region, cover) ?: return@launch
+                } else {
+                    entries.sortedWith(compareBy({ it.box.top }, { it.box.left }))
+                }
+
+                if (cover && OverlayService.coverBegin(lines.map { RegionCoverView.Line(it.box, isLightAt(shot, it.box)) })) {
+                    coverTranslate(lines, if (viaOcr) "[框选·覆盖·识图]" else "[框选·覆盖]")
+                    return@launch
+                }
+
+                // 面板模式（或覆盖层没开起来）：与原来一样整段翻译显示在面板里
+                if (cover) OverlayService.setCaptureHidden(false)  // 覆盖模式下面板一直藏着，这里请回来
+                val text = lines.joinToString("\n") { it.text }
+                Log.i(TAG, "[框选] ${if (viaOcr) "OCR 识别" else "命中"} ${lines.size} 行、${text.length} 字符，开始翻译")
+                translateAndShow(text, if (viaOcr) "[框选·识图]" else "[框选]")
+            } finally {
+                shot?.recycle()
+            }
+        }
+    }
+
+    /**
+     * 框选的 OCR 兜底（v1.29.2）：从整屏截图 [shot] 裁出选区 → 本机 OCR，返回屏幕坐标的行；
+     * 认不出字时自己报错并返回 null。
+     *
+     * 截屏用 [AccessibilityService.takeScreenshot]（Android 11+，需 canTakeScreenshot）而不是
+     * MediaProjection：不弹录屏授权、不常驻，只在需要时截这一次，图片不出设备。
+     */
+    private suspend fun ocrRegion(shot: Bitmap, region: Rect, cover: Boolean): List<RegionLine>? {
+        val l = region.left.coerceIn(0, shot.width - 1)
+        val t = region.top.coerceIn(0, shot.height - 1)
+        val r = region.right.coerceIn(l + 1, shot.width)
+        val b = region.bottom.coerceIn(t + 1, shot.height)
+        val crop = runCatching { Bitmap.createBitmap(shot, l, t, r - l, b - t) }.getOrNull()
+        if (crop == null) {
+            if (cover) OverlayService.setCaptureHidden(false)
+            OverlayService.update("⚠️ 截屏失败", "选区超出了屏幕范围，请重新框选")
+            return null
+        }
+
+        if (!cover) OverlayService.update("（正在识别图片里的文字…）", "正在翻译…")
+        // 与图片翻译页同一套识别（源语言为自动时默认中文模型）
+        val lines = try {
+            OcrEngine.recognizeFor(crop, App.prefs.sourceLang, OcrEngine.Script.CHINESE)
+        } finally {
+            if (crop !== shot) crop.recycle()
+        }
+        if (lines.isEmpty()) {
+            Log.d(TAG, "[框选] OCR 也没认出文字")
+            if (cover) OverlayService.setCaptureHidden(false)
+            OverlayService.update(
+                "📍 框选区域内没有文字",
+                "截屏识别也没认出文字\n\n试试框得更贴近文字，或在设置里把源语言设成图片上的语言"
+            )
+            return null
+        }
+        // OCR 的框是相对裁切图的，平移回屏幕坐标
+        return lines.map { RegionLine(it.text.trim(), Rect(it.box).apply { offset(l, t) }) }
+    }
+
+    /**
+     * 覆盖原文模式的翻译：先整段一次请求（带上下文、省请求），按行拆回；
+     * 行数对不上（模型合并/拆分了行）就退回逐行翻译，保证每块译文盖在自己那一行上。
+     */
+    private suspend fun coverTranslate(lines: List<RegionLine>, mode: String) {
+        val translator = TranslatorFactory.current()
+        val target = App.prefs.targetLang
+        // 一行内的换行压成空格，否则整段拆回时行数必然对不上
+        val src = lines.map { it.text.replace('\n', ' ') }
+        Log.i(TAG, "$mode ${lines.size} 行，开始翻译")
+
+        val out = arrayOfNulls<String>(src.size)
+        val whole = translator.translate(src.joinToString("\n"), target, App.prefs.sourceLang).getOrNull()
+        val split = whole?.trim()?.split('\n')?.map { it.trim() }?.filter { it.isNotEmpty() }
+        if (split != null && split.size == src.size) {
+            split.forEachIndexed { i, s -> out[i] = s; OverlayService.coverChip(i, s) }
+        } else {
+            if (whole != null) Log.w(TAG, "$mode 行数不匹配（送出 ${src.size} 行，返回 ${split?.size} 行）→ 逐行翻译")
+            val sem = Semaphore(COVER_PARALLEL)
+            coroutineScope {
+                src.indices.map { i ->
+                    async {
+                        sem.withPermit {
+                            translator.translate(src[i], target, App.prefs.sourceLang).getOrNull()
+                                ?.trim()?.takeIf { it.isNotEmpty() }
+                                ?.let { out[i] = it; OverlayService.coverChip(i, it) }
+                        }
+                    }
+                }.awaitAll()
+            }
+        }
+
+        val ok = out.count { it != null }
+        if (ok == 0) {
+            OverlayService.coverClose()
+            OverlayService.setCaptureHidden(false)
+            OverlayService.update(src.joinToString("\n").take(300), "翻译失败：引擎没有返回结果，请检查网络或换个引擎")
+            return
+        }
+        OverlayService.coverStatus(
+            (if (ok < src.size) "已翻译 $ok/${src.size} 行" else "已翻译 ${src.size} 行") + " · 点一下关闭 · 按住看原文",
+            autoHideMs = COVER_STATUS_MS
+        )
+        val translated = src.indices.filter { out[it] != null }
+        runCatching {
+            HistoryStore.add(
+                source = translated.joinToString("\n") { src[it] },
+                translated = translated.joinToString("\n") { out[it]!! },
+                mode = mode,
+                targetLang = target,
+                engine = App.prefs.engine
+            )
+        }
+        Log.i(TAG, "$mode 完成 $ok/${src.size} 行")
+    }
+
+    /** 截图里 [box] 一带是不是浅底（与图片翻译同一套取样：6×3 个点的平均亮度） */
+    private fun isLightAt(shot: Bitmap?, box: Rect): Boolean {
+        if (shot == null || shot.isRecycled) return false
+        val l = box.left.coerceIn(0, shot.width - 1)
+        val r = box.right.coerceIn(l + 1, shot.width)
+        val t = box.top.coerceIn(0, shot.height - 1)
+        val b = box.bottom.coerceIn(t + 1, shot.height)
+        var sum = 0.0
+        var n = 0
+        for (i in 0 until 6) for (j in 0 until 3) {
+            val c = shot.getPixel((l + (r - l) * i / 6).coerceIn(0, shot.width - 1), (t + (b - t) * j / 3).coerceIn(0, shot.height - 1))
+            sum += (0.299 * android.graphics.Color.red(c) + 0.587 * android.graphics.Color.green(c) +
+                0.114 * android.graphics.Color.blue(c)) / 255.0
+            n++
+        }
+        return n > 0 && sum / n > 0.55
+    }
+
+    /** 无障碍截屏，转成可读写的软件位图；失败返回 null */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.R)
+    private suspend fun captureScreen(): Bitmap? = suspendCancellableCoroutine { cont ->
+        runCatching {
+            takeScreenshot(
+                android.view.Display.DEFAULT_DISPLAY,
+                mainExecutor,
+                object : TakeScreenshotCallback {
+                    override fun onSuccess(result: ScreenshotResult) {
+                        val buffer = result.hardwareBuffer
+                        val bmp = runCatching {
+                            Bitmap.wrapHardwareBuffer(buffer, result.colorSpace)
+                                // 硬件位图不能直接给 createBitmap 裁切 / OCR 读像素，拷一份软件位图
+                                ?.let { hw -> hw.copy(Bitmap.Config.ARGB_8888, false).also { hw.recycle() } }
+                        }.getOrNull()
+                        buffer.close()
+                        if (cont.isActive) cont.resume(bmp)
+                    }
+
+                    override fun onFailure(errorCode: Int) {
+                        Log.w(TAG, "[框选] 无障碍截屏失败 errorCode=$errorCode")
+                        if (cont.isActive) cont.resume(null)
+                    }
+                }
+            )
+        }.onFailure {
+            Log.w(TAG, "[框选] 无障碍截屏异常: $it")
+            if (cont.isActive) cont.resume(null)
         }
     }
 
@@ -535,6 +726,15 @@ class ScreenReaderService : AccessibilityService() {
         private const val USER_DISABLE_CONFIRM_MS = 3_000L
         private const val SELECTION_DEBOUNCE_MS = 500L
         private const val MAX_DEPTH = 60
+
+        /** 藏起悬浮球/面板后等多久再截屏（给系统一帧以上的刷新时间） */
+        private const val CAPTURE_SETTLE_MS = 120L
+
+        /** 覆盖原文模式退回逐行翻译时的并发上限（与图片翻译的逐行贴合同量级，避免被限流） */
+        private const val COVER_PARALLEL = 3
+
+        /** 覆盖层顶部「已翻译 N 行」提示停留多久 */
+        private const val COVER_STATUS_MS = 3_000L
 
         @Volatile
         var instance: ScreenReaderService? = null

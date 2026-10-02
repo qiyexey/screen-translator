@@ -190,6 +190,14 @@ class Prefs(context: Context) {
         set(value) = sp.edit().putBoolean(KEY_SKIP_SAME_LANG, value).apply()
 
     /**
+     * 框选翻译的呈现方式（v1.29.2）：false = 译文显示在面板里（原行为），
+     * true = 逐行盖在原文位置上。在框选遮罩顶部的切换按钮里改，记住上次的选择。
+     */
+    var regionCover: Boolean
+        get() = sp.getBoolean(KEY_REGION_COVER, false)
+        set(value) = sp.edit().putBoolean(KEY_REGION_COVER, value).apply()
+
+    /**
      * 按 App 过滤自动翻译（v1.29.0）：[AppFilterMode] 的 OFF / BLOCK / ALLOW。
      * BLOCK = 名单里的 App 不自动翻译；ALLOW = 只在名单里的 App 自动翻译。
      */
@@ -711,6 +719,7 @@ class Prefs(context: Context) {
         private const val KEY_GLOSSARY = "glossary"
         private const val KEY_DICTIONARY_MODE = "dictionary_mode"
         private const val KEY_SKIP_SAME_LANG = "skip_same_lang"
+        private const val KEY_REGION_COVER = "region_cover"
         private const val KEY_APP_FILTER_MODE = "app_filter_mode"
         private const val KEY_APP_FILTER_PACKAGES = "app_filter_packages"
         private const val KEY_PANEL_Y = "panel_y"

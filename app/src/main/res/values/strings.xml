@@ -535,20 +535,16 @@
     <string name="history_t02">已清空（收藏保留）</string>
     <string name="base_t02">已设置忽略电池优化 ✅</string>
     <string name="permission_t06">悬浮窗已启动</string>
-    <string name="image_translate_t03">截图失败。可能是系统限制了截屏，请重试。</string>
     <string name="camera_translate_t01">整段翻译中（一次请求，带上下文）…</string>
     <string name="camera_translate_t02">未授予相机权限。可到 系统设置 → 应用 → 屏幕翻译 → 权限 里开启</string>
     <string name="live_translate_t22">未授权屏幕捕获，无法开始</string>
-    <string name="image_translate_t04">未获得截图授权。图片翻译需要该权限才能读取屏幕内容。</string>
     <string name="image_translate_t05">本机识别中（不走网络）…</string>
     <string name="engine_settings_t42">模型已加载，可以开始翻译了</string>
     <string name="engine_settings_t43">正在加载模型到内存…（首次约几秒）</string>
     <string name="camera_translate_t03">正在处理上一张，请稍候</string>
     <string name="camera_translate_t04">正在处理，请稍候</string>
     <string name="engine_settings_t44">正在导入…</string>
-    <string name="image_translate_t06">正在抓取屏幕…</string>
     <string name="tts_settings_t09">正在朗读…</string>
-    <string name="image_translate_t07">正在申请屏幕截图权限…</string>
     <string name="image_translate_t08">正在翻译中，请稍候</string>
     <string name="history_t03">没有可导出的记录</string>
     <!-- v1.29.0 历史页改 XML + M3 -->
@@ -582,13 +578,10 @@
     <string name="image_translate_t11">选区太小，请拖出一个更大的框</string>
     <!-- v1.25.0 相册选图：把"选图"做成与"截屏"并列的一等来源 -->
     <string name="image_translate_btn_gallery">从相册选择</string>
-    <string name="image_translate_btn_capture">截取屏幕</string>
-    <string name="image_translate_t13">点「从相册选择」挑一张图，或点「截取屏幕」翻译当前画面。</string>
+    <string name="image_translate_t13">点「从相册选择」挑一张图，也可以在别的 App 里「分享 → 翻译图片」。要翻正在看的画面，用悬浮球框选或全屏翻译。</string>
     <string name="image_translate_t14">正在读取图片…</string>
     <string name="image_translate_t15">这张图片读不出来，可能已被删除或无权访问，换一张试试。</string>
     <!-- v1.25.0 译文原位覆盖：默认把每行译文盖回原文位置，可切回框选 -->
-    <string name="image_translate_btn_full">翻译整张图</string>
-    <string name="image_translate_btn_whole">全文翻译</string>
     <string name="image_translate_btn_speak">朗读译文</string>
     <string name="image_translate_mode_overlay">原位覆盖</string>
     <string name="image_translate_mode_region">框选翻译</string>
@@ -603,9 +596,6 @@
     <string name="image_translate_t24">点一行字即可就地翻译，按住屏幕可看原文</string>
     <string name="image_translate_t25">已切到「译文盖在原文上」：选图后自动逐行贴合，点某一行可单独翻。</string>
     <string name="image_translate_t26">识别到 %1$d 行 · 整屏逐行贴合中…</string>
-    <string name="image_translate_t27">还没有可翻译的文字，先选一张图或在图上框一块</string>
-    <string name="image_translate_t28">整段翻译中（一次请求，带上下文）…</string>
-    <string name="image_translate_t29">整段翻译完成，已在下方显示。</string>
     <string name="image_translate_t30">这里没识别到文字，点在文字上试试</string>
     <string name="camera_translate_t10">需要相机权限才能拍照翻译</string>
     <string name="voice_translate_t08">需要麦克风权限才能语音识别</string>
